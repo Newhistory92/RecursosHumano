@@ -16,7 +16,7 @@ export const LeaveRequestSchema = z
     tipo: z.enum(
       [
         "Licencia",
-        "Parte Medico",
+        "Parte_Medico",
         "Profilactica",
         "Particular",
         "Matrimonio",
@@ -26,7 +26,7 @@ export const LeaveRequestSchema = z
         "Maternidad",
         "Fallecimiento",
         "Enfermedad",
-        "Guarda-Tenencia",
+        "Guarda_Tenencia",
       ],
       {
         required_error: "Debe seleccionar un tipo de licencia",
@@ -148,7 +148,7 @@ export const LeaveRequestSchema = z
   )
   .refine(
     (data) => {
-      if (data.tipo === "Guarda-Tenencia") {
+      if (data.tipo === "Guarda_Tenencia") {
         return data.cantidad >= 10 && data.cantidad <= 15
       }
       return true

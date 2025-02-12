@@ -1,11 +1,21 @@
-const express = require("express")
-const router = express.Router()
-const licenciasController = require("../controllers/licenciasController")
+const express = require('express');
+const router = express.Router();
+const licenciasController = require('../controllers/licenciasController');
+// console.log("licenciasController:", licenciasController);
+// Rutas para consulta de licencias
+router.get('/resumen/:operadorId', licenciasController.getResumenLicencias);
+// router.get('/historial/:operadorId', licenciasController.getHistorialLicencias);
 
-// Rutas para licencias
-router.get("/", licenciasController.getLicencias)
-router.get("/pendientes", licenciasController.getLicenciasPendientes)
-router.get("/disponibles/:empleadoId", licenciasController.getDiasDisponibles)
+// Ruta para forzar actualización manual (solo para pruebas/admin)
+router.post('/actualizar', async (req, res) => {
+  try {
+    await licenciasController.actualizacionAutomatica();
+    res.json({ message: 'Actualización completada' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-module.exports = router
+module.exports = router;
+
 

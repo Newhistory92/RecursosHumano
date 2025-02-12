@@ -1,5 +1,5 @@
 const sql = require("mssql")
-const { dbConfig } = require("../config/configdb")
+const { dbConfig } = require('../config/configbd');
 
 async function calcularYActualizarHorasExtra() {
     try {

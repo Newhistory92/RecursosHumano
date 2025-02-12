@@ -1,4 +1,5 @@
 const sql = require("mssql")
+require("dotenv").config(); 
 
 // Configuración de la base de datos
 const dbConfig = {
