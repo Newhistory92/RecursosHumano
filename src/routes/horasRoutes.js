@@ -1,11 +1,12 @@
-// const express = require("express")
-// const router = express.Router()
-// const horasController = require("../controllers/horasController")
+const express = require('express');
+const router = express.Router();
+const horasController = require('../controllers/horasController');
 
-// // Rutas para horas
-// router.get("/adeudadas/:empleadoId", horasController.getHorasAdeudadas)
-// router.get("/balance/:empleadoId", horasController.getBalanceHoras)
-// router.put("/actualizar/:empleadoId", horasController.actualizarHorasAdeudadas)
+// Obtener resumen de horas trabajadas
+router.get('/resumen/:operadorId', horasController.obtenerResumen);
 
-// module.exports = router
+// Endpoint para sincronización manual (solo para pruebas/admin)
+router.post('/sincronizar', horasController.sincronizarManual);
+
+module.exports = router;
 

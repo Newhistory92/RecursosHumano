@@ -6,32 +6,41 @@ const configService = require('../config/serverLicencia');
 const dataService = require('./dataService');
 
 class LicenciasService {
-
-  // async actualizarUsoLicencias(operadorId, tipo, anio) {
-  //   const pool = await getConnection();
+  async actualizarUsoLicencias(operadorId, tipo, anio) {
+    const pool = await getConnection();
     
-  //   try {
-  //     const totalResult = await pool.request()
-  //       .input('operadorId', sql.VarChar, operadorId)
-  //       .input('tipo', sql.VarChar(50), tipo)
-  //       .input('anio', sql.Int, anio)
-  //       .query(QUERIES.getTotalUsado);
+    try {
+      // 1. Obtener el total de días usados de la tabla Licencias
+      const totalResult = await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+        .input('tipo', sql.VarChar(50), tipo)
+        .input('anio', sql.Int, anio)
+        .query(QUERIES.getTotalUsado);
 
-  //     const totalUsado = totalResult.recordset[0].totalUsado;
+      const totalUsado = totalResult.recordset[0].totalUsado || 0;
 
-  //     await pool.request()
-  //       .input('operadorId', sql.VarChar, operadorId)
-  //       .input('tipo', sql.VarChar(50), tipo)
-  //       .input('anio', sql.Int, anio)
-  //       .input('totalUsado', sql.Int, totalUsado)
-  //       .query(QUERIES.mergeUsoLicencias);
+      // 2. Actualizar la tabla UsoLicencias con el total calculado
+      await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+        .input('tipo', sql.VarChar(50), tipo)
+        .input('anio', sql.Int, anio)
+        .input('totalUsado', sql.Int, totalUsado)
+        .query(QUERIES.mergeUsoLicencias);
 
-  //     return { success: true };
-  //   } catch (error) {
-  //     console.error('Error actualizando uso de licencias:', error);
-  //     throw error;
-  //   }
-  // }
+      // 3. Invalidar caché para reflejar los cambios
+      dataService.invalidateOperadorCache(operadorId);
+
+      return { 
+        success: true,
+        totalUsado,
+        mensaje: `Total de días usados actualizado para ${tipo}: ${totalUsado}`
+      };
+    } catch (error) {
+      console.error('Error actualizando uso de licencias:', error);
+      throw error;
+    }
+  }
+
   static async calcularDiasDisponibles(operadorId, tipo, anio) {
     try {
       const personalData = await dataService.loadPersonalData(operadorId);
@@ -120,12 +129,17 @@ class LicenciasService {
           };
         }));
 
+        // Obtener historial detallado de licencias
         const historial = await dataService.loadHistorialLicencias(operadorId, tipo, anioActual);
 
         return {
           tipo,
           usoAnual,
-          historial
+          historial: historial.map(lic => ({
+            ...lic,
+            fechaInicio: new Date(lic.fechaInicio).toISOString().split('T')[0],
+            fechaFin: new Date(lic.fechaFin).toISOString().split('T')[0]
+          }))
         };
       }));
 
@@ -148,6 +162,7 @@ class LicenciasService {
       throw error;
     }
   }
+
 }
 
 module.exports = new LicenciasService();

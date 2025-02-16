@@ -25,10 +25,14 @@ const TIPOS_LICENCIA = [
       soloMedicos: true 
     },
   };
-  const ACTUALIZACION_SCHEDULE = '* *  * * *';
+
+  // Schedules para actualizaciones
+  const ACTUALIZACION_DIARIA = '0 0 * * *'; // Todos los días a medianoche
+  const ACTUALIZACION_OCTUBRE = '0 0 1 10 *'; // 1 de octubre a medianoche
   
   module.exports = {
     TIPOS_LICENCIA,
     DIAS_POR_TIPO,
-    ACTUALIZACION_SCHEDULE
+    ACTUALIZACION_DIARIA,
+    ACTUALIZACION_OCTUBRE
   };

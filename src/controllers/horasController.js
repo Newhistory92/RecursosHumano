@@ -1,5 +1,7 @@
 const sql = require("mssql")
 const { dbConfig } = require('../config/configbd');
+const sincronizacionService = require('../services/sincronizacionService');
+const schedule = require('node-schedule');
 
 async function calcularYActualizarHorasExtra() {
     try {
@@ -57,3 +59,46 @@ cron.schedule('*/30 * * * *', () => {
     console.log('Ejecutando cálculo y actualización de horas extra...');
     calcularYActualizarHorasExtra();
 });
+
+class HorasController {
+  constructor() {
+    // Programar sincronización diaria a las 00:00
+    schedule.scheduleJob('0 0 * * *', async () => {
+      console.log('Iniciando sincronización automática');
+      try {
+        await sincronizacionService.sincronizarRegistrosDiarios();
+      } catch (error) {
+        console.error('Error en sincronización automática:', error);
+      }
+    });
+  }
+
+  async obtenerResumen(req, res) {
+    try {
+      const { operadorId } = req.params;
+      const resumen = await sincronizacionService.obtenerResumenOperador(operadorId);
+      res.json(resumen);
+    } catch (error) {
+      console.error('Error obteniendo resumen:', error);
+      res.status(500).json({ 
+        error: 'Error obteniendo resumen',
+        mensaje: error.message 
+      });
+    }
+  }
+
+  async sincronizarManual(req, res) {
+    try {
+      const resultado = await sincronizacionService.sincronizarRegistrosDiarios();
+      res.json(resultado);
+    } catch (error) {
+      console.error('Error en sincronización manual:', error);
+      res.status(500).json({ 
+        error: 'Error en sincronización',
+        mensaje: error.message 
+      });
+    }
+  }
+}
+
+module.exports = new HorasController();

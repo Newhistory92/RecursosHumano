@@ -1,0 +1,145 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+model Operador {
+  id             String         @id @default(cuid())
+  numeroOperador String         @unique @db.VarChar(5)
+  name           String         @db.VarChar(50)
+  email          String         @unique @db.VarChar(200)
+  password       String         @db.VarChar(255)
+  phone          String         @db.VarChar(13)
+  dni            String         @unique @db.VarChar(8)
+  sexo           String         @db.VarChar(20)
+  address        String?        @db.VarChar(200)
+  coordinatesLat Float?        
+  coordinatesLon Float? 
+  role           String         @default("EMPLOYEE")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  notificacionesCreadas Notificacion[] @relation("OperadorAutor")
+  notificacionesRecibidas Notificacion[] @relation("OperadorReceptor")
+  publicaciones  Publicacion[]
+  plantillas     Plantillas[]
+  grupos         Grupos[]
+  personal       Personal[] @relation("SupervisorLicencias")
+  horasTrabajadas HorasTrabajadas[]
+  licencias      Licencias[]
+  quejas          Quejas[]
+  @@index([email])
+  @@index([numeroOperador])
+  Personal Personal[]
+  UsoLicencias UsoLicencias[]
+}
+model Publicacion {
+  id                Int       @id @default(autoincrement())
+  titulo            String    @db.VarChar(200)
+  contenido         String    @db.Text
+  autorId           String
+  // Campos para la jerarquía completa
+  categoriaId       Int
+  categoriaNombre   String    @db.VarChar(100)
+  subCategoriaId    Int?
+  subCategoriaNombre String?  @db.VarChar(100)
+  subSubCategoriaId Int?
+  subSubCategoriaNombre String? @db.VarChar(100)
+  // Ruta completa para facilitar filtrado y búsqueda
+  rutaCategoria     String    @db.VarChar(300)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  autor             Operador  @relation(fields: [autorId], references: [id])
+
+  @@index([categoriaId, subCategoriaId, subSubCategoriaId])
+  @@index([rutaCategoria])
+}
+
+model Personal{
+  id              Int            @id @default(autoincrement())
+  operadorId      String         // Relación con Operador
+  idReloj         String?        @db.VarChar(10)
+  tipo             String?   @db.VarChar(50) @default("Activo") // 'LICENCIA', 'PARTICULAR', 'PARTE_MEDICO', 'MATRIMONIO', 'MATERNIDAD', 'PATERNIDAD'
+  fechaInicioTrabj     DateTime?
+  condicionLaboral String?        @db.VarChar(50)  // 'PLANTA_PERMANENTE',  'CONTRATADO','Comisionado'
+  diasLicenciaAsignados Int?
+  departamento    String?         @db.VarChar(100)
+  cargo           String?         @db.VarChar(100)
+  supervisorId    String?        // ID del supervisor
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relaciones
+  operador        Operador       @relation(fields: [operadorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  supervisor      Operador?      @relation("SupervisorLicencias", fields: [supervisorId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  @@index([operadorId])
+  @@index([supervisorId])
+
+}
+
+
+model Licencias { 
+  id               Int       @id @default(autoincrement())
+  operadorId       String    // Relación con Operador
+  tipo             String?   @db.VarChar(50) // 'LICENCIA', 'PARTICULAR', 'PARTE_MEDICO', 'MATRIMONIO', 'MATERNIDAD', 'PATERNIDAD'
+  fechaInicio      DateTime?  // Fecha de inicio del registro
+  fechaFin         DateTime?  // Fecha de fin del registro
+  cantidad         Int       // Cantidad de días o licencias utilizadas
+  estado           String?    @db.VarChar(20)  //  'APROBADA', 'RECHAZADA'
+  anio             Int       // Año al que corresponde el registro (para facilitar cálculos)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relación con Operador
+  operador         Operador  @relation(fields: [operadorId], references: [id])
+   @@index([fechaInicio, fechaFin])
+  @@index([operadorId])
+  @@index([estado])
+  @@index([tipo])
+  @@index([anio]) // Cambiado de "año" a "anio"
+}
+
+
+model UsoLicencias {
+  id             Int      @id @default(autoincrement())
+  operadorId     String
+  tipo           String   @db.VarChar(50) // 'LICENCIA', 'PARTICULAR', etc.
+  anio           Int
+  totalUsado     Int      // Suma de 'cantidad' de Licencias para ese año y tipo
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+
+  operador       Operador @relation(fields: [operadorId], references: [id])
+
+  @@index([operadorId])
+  @@index([tipo])
+  @@index([anio])
+}
+model HorasTrabajadas {
+  id              Int       @id @default(autoincrement())
+  operadorId      String    // Cambiado para relacionar con Operador
+  horaEntrada     DateTime
+  horaSalida      DateTime?
+  horasExtra      Float?     // Puede ser positivo (horas extra) o negativo (horas debidas)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relación
+ operador       Operador  @relation(fields: [operadorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([operadorId])
+}
+
+model ConfigPersonal {
+  id               Int       @id @default(autoincrement())
+  libreEleccionGerencial  Boolean  @default(false) 
+  condicionLaboral String?    @db.VarChar(50) // 'PLANTA_PERMANENTE', 'PLANTA_POLITICA', 'CONTRATADO'
+  horasRequeridas  Int?       // Horas que debe trabajar según su condición
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
