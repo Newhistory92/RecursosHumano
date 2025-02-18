@@ -76,7 +76,8 @@ class LicenciasService {
         } else {
           diasTotales = await configService.calcularDiasSegunAntiguedad(
             personalData.fechaInicioPlanta,
-            personalData.condicionLaboral
+            personalData.condicionLaboral,
+            operadorId
           );
         }
       } else {
@@ -96,63 +97,88 @@ class LicenciasService {
   }
 
   async getResumenLicencias(operadorId) {
-    const anioActual = new Date().getFullYear();
-
+    const hoy = new Date();
+    const currentYear = hoy.getFullYear();
+    const activeYearLicencia = hoy.getMonth() < 9 ? currentYear - 1 : currentYear;
+  
     try {
       const personalData = await dataService.loadPersonalData(operadorId);
       let diasLicencia;
-
+  
       // Determinar días de licencia según condición laboral
       if (personalData.condicionLaboral === 'Contratado') {
         diasLicencia = DIAS_POR_TIPO.Licencia.Contratado;
       } else {
         diasLicencia = await configService.calcularDiasSegunAntiguedad(
           personalData.fechaInicioPlanta,
-          personalData.condicionLaboral
+          personalData.condicionLaboral,
+          operadorId
         );
       }
-
-      const resumen = await Promise.all(TIPOS_LICENCIA.map(async (tipo) => {
-        const años = tipo === 'Licencia' ? 
-          [anioActual, anioActual - 1, anioActual - 2] : 
-          [anioActual];
-
-        const usoAnual = await Promise.all(años.map(async (anio) => {
-          const { usado, total, disponible } = await LicenciasService.calcularDiasDisponibles(operadorId, tipo, anio);
-          
+  
+      // Obtener información del operador
+      const pool = await getConnection();
+      const operadorResult = await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+        .query(QUERIES.getOperadorById);
+  
+      if (!operadorResult.recordset[0]) {
+        throw new Error('Operador no encontrado');
+      }
+      const { sexo } = operadorResult.recordset[0];
+  
+      // Filtrar tipos de licencia según el sexo
+      const getTiposLicenciaPermitidos = (sexo) => {
+        let tipos = [...TIPOS_LICENCIA]; // Clonar el arreglo original
+        const sexoNormalized = sexo ? sexo.trim().toLowerCase() : "";
+  
+        if (sexoNormalized === 'masculino') {
+          tipos = tipos.filter(tipo => tipo !== 'Maternidad');
+        } else if (sexoNormalized === 'femenino') {
+          tipos = tipos.filter(tipo => tipo !== 'Paternidad');
+        }
+        return tipos;
+      };
+  
+      const tiposLicencia = getTiposLicenciaPermitidos(sexo);
+  
+      const resumen = await Promise.all(
+        tiposLicencia.map(async (tipo) => {
+          const años = tipo === 'Licencia' ? 
+            [activeYearLicencia, activeYearLicencia - 1, activeYearLicencia - 2] :
+            [currentYear];
+  
+          const usoAnual = await Promise.all(
+            años.map(async (anio) => {
+              const { usado, total, disponible } = await LicenciasService.calcularDiasDisponibles(operadorId, tipo, anio);
+              return {
+                anio,
+                usado,
+                disponible,
+                total,
+                displayFormat: total === null ? `${usado}` : `${usado}/${total}`,
+                resumen: total === null ? `${usado}` : `${usado}/${total}`
+              };
+            })
+          );
+  
+          // Obtener historial detallado
+          const historial = await dataService.loadHistorialLicencias(operadorId, tipo, currentYear);
+  
           return {
-            anio,
-            usado,
-            disponible,
-            total,
-            displayFormat: total === null ? `${usado}/∞` : `${usado}/${total}`
+            tipo,
+            usoAnual,
+            historial: historial.map(lic => ({
+              ...lic,
+              fechaInicio: lic.fechaInicio ? new Date(lic.fechaInicio).toISOString().split('T')[0] : null,
+              fechaFin: lic.fechaFin ? new Date(lic.fechaFin).toISOString().split('T')[0] : null
+            }))
           };
-        }));
-
-        // Obtener historial detallado de licencias
-        const historial = await dataService.loadHistorialLicencias(operadorId, tipo, anioActual);
-
-        return {
-          tipo,
-          usoAnual,
-          historial: historial.map(lic => ({
-            ...lic,
-            fechaInicio: new Date(lic.fechaInicio).toISOString().split('T')[0],
-            fechaFin: new Date(lic.fechaFin).toISOString().split('T')[0]
-          }))
-        };
-      }));
-
-      const resumenFormateado = resumen.map(item => ({
-        ...item,
-        usoAnual: item.usoAnual.map(uso => ({
-          ...uso,
-          resumen: uso.displayFormat
-        }))
-      }));
-
+        })
+      );
+  
       return {
-        resumen: resumenFormateado,
+        resumen,
         condicionLaboral: personalData.condicionLaboral,
         fechaIngreso: personalData.fechaInicioPlanta,
         diasLicenciaAnuales: diasLicencia
@@ -162,7 +188,10 @@ class LicenciasService {
       throw error;
     }
   }
-
+  
+  
+  
+  
 }
 
 module.exports = new LicenciasService();

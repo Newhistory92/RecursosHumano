@@ -6,6 +6,13 @@ const QUERIES = {
     WHERE p.operadorId = @operadorId
   `,
 
+  getOperadorById: `
+ SELECT sexo
+FROM Operador
+WHERE id = @operadorId
+
+  `,
+
   getConfigPersonal: `
     SELECT *
     FROM ConfigPersonal
@@ -24,9 +31,11 @@ const QUERIES = {
     WHERE operadorId = @operadorId
     AND tipo = @tipo
     AND anio = @anio
-    AND estado = 'APROBADA'
+     AND estado = 'Aprobado'
   `,
+ // AND estado = 'APROBADA'
 
+//
   getHistorialLicencias: `
     SELECT 
       id,
@@ -70,6 +79,14 @@ const QUERIES = {
         source.totalUsado,
         GETDATE()
       );
+  `,
+
+  getLicenciasDelAño: `
+    SELECT cantidad 
+    FROM Licencias 
+    WHERE operadorId = @operadorId 
+    AND YEAR(anio) = @año 
+    AND tipo = @tipo
   `
 };
 

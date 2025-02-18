@@ -10,6 +10,7 @@ const TIPOS_LICENCIA = [
       calcularPorAntiguedad: true // Indica que para otros casos se calcula por antigüedad
     },
     Parte_Medico: null, 
+    Articulo: null,
     Maternidad: 90,
     Paternidad: 5,
     Paternidad_Especial: 30,

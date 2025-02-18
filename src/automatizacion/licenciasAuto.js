@@ -76,7 +76,7 @@ class ActualizacionService {
                     WHERE operadorId = @operadorId
                     AND tipo = 'Licencia'
                     AND anio = @anio
-                    AND estado = 'APROBADA'
+                    AND estado = 'Aprobada'
                     AND fechaInicio >= DATEFROMPARTS(@anio, 10, 1)
                   ),
                   updatedAt = GETDATE()
