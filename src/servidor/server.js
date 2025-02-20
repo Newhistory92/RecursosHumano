@@ -2,7 +2,7 @@ const express = require("express")
 const cors = require("cors")
 
 const licenciasRoutes = require("../routes/licenciasRoutes")
-// const horasRoutes = require("../routes/horasRoutes")
+ const horasRoutes = require("../routes/horasRoutes")
 const errorHandler = require("../middleware/errorHandler")
 const { testConnection } = require("../config/configbd");
 require("dotenv").config()
@@ -21,7 +21,7 @@ testConnection();
 // Routes
 
 app.use("/api/licencias", licenciasRoutes)
-// app.use("/api/horas", horasRoutes)
+app.use("/api/horas", horasRoutes)
 
 // Middleware para rutas no encontradas
 app.use((req, res) => {

@@ -43,7 +43,9 @@ WHERE id = @operadorId
       fechaFin,
       cantidad,
       estado,
-      anio
+      anio,
+      createdAt,
+      updatedAt
     FROM Licencias
     WHERE operadorId = @operadorId
       AND tipo = @tipo
@@ -87,6 +89,27 @@ WHERE id = @operadorId
     WHERE operadorId = @operadorId 
     AND YEAR(anio) = @año 
     AND tipo = @tipo
+  `,
+
+  getLicenciasActivas: `
+    SELECT TOP 8 L.operadorId, L.tipo, L.fechaInicio, L.fechaFin
+    FROM Licencias L
+    WHERE L.estado = 'Aprobado'
+    ORDER BY L.createdAt DESC
+  `,
+
+  actualizarTipoPersonal: `
+    UPDATE Personal
+    SET tipo = @tipo,
+        updatedAt = GETDATE()
+    WHERE operadorId = @operadorId
+  `,
+
+  reactivarPersonal: `
+    UPDATE Personal
+    SET tipo = 'Activo',
+        updatedAt = GETDATE()
+    WHERE operadorId = @operadorId
   `
 };
 

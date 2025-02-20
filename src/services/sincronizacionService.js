@@ -90,6 +90,89 @@ class SincronizacionService {
       throw error;
     }
   }
+
+  async sincronizarHorasTrabajadas() {
+    try {
+      console.log('Iniciando sincronización de horas trabajadas...');
+      const pool = await getConnection();
+
+      // Obtener todos los registros de SystemLog
+      const logs = await accessDBService.getSystemLogsPorDia();
+
+      // Agrupar registros por ID
+      const registrosPorId = this.agruparRegistrosPorId(logs);
+
+      // Procesar cada grupo de registros
+      for (const [idReloj, registros] of Object.entries(registrosPorId)) {
+        if (registros.length >= 2) {
+          const horaEntrada = this.extraerHora(registros[0].logTime);
+          const horaSalida = this.extraerHora(registros[1].logTime);
+          const fecha = this.extraerFecha(registros[0].logTime);
+
+          // Registrar en la base de datos
+          await pool.request()
+            .input('idReloj', sql.Int, idReloj)
+            .input('fecha', sql.Date, fecha)
+            .input('horaEntrada', sql.Time, horaEntrada)
+            .input('horaSalida', sql.Time, horaSalida)
+            .query(`
+              MERGE INTO registrarHorasTrabajadas AS target
+              USING (VALUES (@idReloj, @fecha, @horaEntrada, @horaSalida)) 
+                AS source (idReloj, fecha, horaEntrada, horaSalida)
+              ON target.idReloj = source.idReloj 
+                AND target.fecha = source.fecha
+              WHEN MATCHED THEN
+                UPDATE SET 
+                  horaEntrada = source.horaEntrada,
+                  horaSalida = source.horaSalida,
+                  updatedAt = GETDATE()
+              WHEN NOT MATCHED THEN
+                INSERT (idReloj, fecha, horaEntrada, horaSalida, createdAt, updatedAt)
+                VALUES (
+                  source.idReloj,
+                  source.fecha,
+                  source.horaEntrada,
+                  source.horaSalida,
+                  GETDATE(),
+                  GETDATE()
+                );
+            `);
+
+          console.log(`Registros sincronizados para idReloj ${idReloj}: ${fecha} - E: ${horaEntrada}, S: ${horaSalida}`);
+        }
+      }
+
+      console.log('Sincronización completada exitosamente');
+    } catch (error) {
+      console.error('Error en la sincronización:', error);
+      throw error;
+    }
+  }
+
+  agruparRegistrosPorId(logs) {
+    const grupos = {};
+    
+    for (const log of logs) {
+      if (!grupos[log.id]) {
+        grupos[log.id] = [];
+      }
+      grupos[log.id].push(log);
+    }
+
+    return grupos;
+  }
+
+  extraerHora(fechaISO) {
+    if (!fechaISO) return null;
+    const fecha = new Date(fechaISO);
+    return fecha.toTimeString().split(' ')[0];
+  }
+
+  extraerFecha(fechaISO) {
+    if (!fechaISO) return null;
+    const fecha = new Date(fechaISO);
+    return fecha.toISOString().split('T')[0];
+  }
 }
 
 module.exports = new SincronizacionService(); 

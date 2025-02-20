@@ -21,3 +21,6 @@ npm-debug.log*
 # env files
 .env
 !.env.example
+
+/ATT2000.ldb
+/ATT2000.MDB

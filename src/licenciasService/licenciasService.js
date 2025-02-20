@@ -62,6 +62,7 @@ class LicenciasService {
           disponible: Math.max(0, DIAS_POR_TIPO.Profilactica.dias - totalUsado)
         };
       }
+
       // Si es Parte_Medico, retorna sin límite
       if (tipo === 'Parte_Medico') {
         return { usado: totalUsado, total: null, disponible: null };
@@ -71,15 +72,12 @@ class LicenciasService {
 
       // Si es Licencia, el cálculo depende de la condición laboral
       if (tipo === 'Licencia') {
-        if (personalData.condicionLaboral === 'Contratado') {
-          diasTotales = DIAS_POR_TIPO.Licencia.Contratado;
-        } else {
-          diasTotales = await configService.calcularDiasSegunAntiguedad(
-            personalData.fechaInicioPlanta,
-            personalData.condicionLaboral,
-            operadorId
-          );
-        }
+        diasTotales = await configService.calcularDiasSegunAntiguedad(
+          personalData.fechaInicioPlanta,
+          personalData.condicionLaboral,
+          personalData.fechaInicioTrabj,
+          operadorId
+        );
       } else {
         // Para otros tipos, usar DIAS_POR_TIPO
         diasTotales = DIAS_POR_TIPO[tipo] || 0;
@@ -112,6 +110,7 @@ class LicenciasService {
         diasLicencia = await configService.calcularDiasSegunAntiguedad(
           personalData.fechaInicioPlanta,
           personalData.condicionLaboral,
+          personalData.fechaInicioTrabj,
           operadorId
         );
       }
@@ -171,7 +170,9 @@ class LicenciasService {
             historial: historial.map(lic => ({
               ...lic,
               fechaInicio: lic.fechaInicio ? new Date(lic.fechaInicio).toISOString().split('T')[0] : null,
-              fechaFin: lic.fechaFin ? new Date(lic.fechaFin).toISOString().split('T')[0] : null
+              fechaFin: lic.fechaFin ? new Date(lic.fechaFin).toISOString().split('T')[0] : null,
+              createdAt: lic.createdAt ? new Date(lic.createdAt).toISOString() : null,
+              updatedAt: lic.updatedAt ? new Date(lic.updatedAt).toISOString() : null
             }))
           };
         })

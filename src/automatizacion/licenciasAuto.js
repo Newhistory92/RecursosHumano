@@ -4,6 +4,7 @@ const { QUERIES } = require('../utils/queries');
 const { TIPOS_LICENCIA, ACTUALIZACION_DIARIA, ACTUALIZACION_OCTUBRE } = require('../utils/type');
 const licenciasService = require('../licenciasService/licenciasService');
 const ConfigService = require('../config/serverLicencia');
+const sql = require('mssql');
 
 class ActualizacionService {
   async actualizacionDiaria() {
@@ -100,6 +101,45 @@ class ActualizacionService {
     }
   }
 
+  async actualizarEstadosLicencias() {
+    try {
+      const pool = await getConnection();
+      const fechaActual = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+
+      // Obtener las últimas 8 licencias
+      const result = await pool.request()
+        .query(QUERIES.getLicenciasActivas);
+
+      for (const licencia of result.recordset) {
+        const fechaInicio = new Date(licencia.fechaInicio).toISOString().split('T')[0];
+        const fechaFin = licencia.fechaFin ? new Date(licencia.fechaFin).toISOString().split('T')[0] : null;
+
+        // Si la fecha actual coincide con la fecha de inicio, actualizar tipo
+        if (fechaInicio === fechaActual) {
+          await pool.request()
+            .input('operadorId', sql.VarChar, licencia.operadorId)
+            .input('tipo', sql.VarChar, licencia.tipo)
+            .query(QUERIES.actualizarTipoPersonal);
+
+          console.log(`Actualizado operador ${licencia.operadorId} a tipo ${licencia.tipo}`);
+        }
+
+        // Si la fecha actual coincide con la fecha de fin, reactivar personal
+        if (fechaFin === fechaActual) {
+          await pool.request()
+            .input('operadorId', sql.VarChar, licencia.operadorId)
+            .query(QUERIES.reactivarPersonal);
+
+          console.log(`Reactivado operador ${licencia.operadorId}`);
+        }
+      }
+
+      console.log('Actualización diaria de estados de licencias completada');
+    } catch (error) {
+      console.error('Error en actualización diaria de estados:', error);
+    }
+  }
+
   iniciarActualizacionAutomatica() {
     // Actualización diaria a medianoche
     schedule.scheduleJob(ACTUALIZACION_DIARIA, async () => {
@@ -119,6 +159,14 @@ class ActualizacionService {
       } catch (error) {
         console.error('Error en la actualización de octubre:', error);
       }
+    });
+  }
+
+  iniciarActualizacionDiaria() {
+    // Ejecutar todos los días a las 00:00
+    schedule.scheduleJob(ACTUALIZACION_DIARIA, async () => {
+      console.log('Iniciando actualización diaria de estados de licencias');
+      await this.actualizarEstadosLicencias();
     });
   }
 }

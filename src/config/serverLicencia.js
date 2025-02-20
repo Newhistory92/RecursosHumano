@@ -4,24 +4,45 @@ const { QUERIES } = require('../utils/queries');
 const { DIAS_POR_TIPO } = require('../utils/type');
 
 class ConfigService {
-  async calcularDiasSegunAntiguedad(fechaInicioPlanta, condicionLaboral, operadorId) {
+  async calcularDiasSegunAntiguedad(fechaInicioPlanta, condicionLaboral, fechaInicioTrabj, operadorId) {
     console.log('Iniciando cálculo con:', {
       condicionLaboral,
       operadorId,
-      fechaInicioPlanta
+      fechaInicioPlanta,
+      fechaInicioTrabj
     });
 
     // Normalizar condicionLaboral (si viene como array, tomar el primer elemento)
     const tipoContrato = Array.isArray(condicionLaboral) ? condicionLaboral[0] : condicionLaboral;
     console.log('Tipo de contrato normalizado:', tipoContrato);
 
-    // Si es contratado, asignar directamente 10 días sin cálculos
+    // Si es contratado, calcular según fechaInicioTrabj
     if (tipoContrato === 'Contratado') {
-      console.log('Es contratado, asignando 10 días fijos');
-      return await this.actualizarDiasLicencia(operadorId, 10);
+      if (!fechaInicioTrabj) {
+        console.log('No se proporcionó fechaInicioTrabj, asignando 10 días fijos');
+        return 10;
+      }
+
+      const hoy = new Date();
+      const inicio = new Date(fechaInicioTrabj);
+      const mesesTrabajados = this.calcularMesesTrabajados(inicio, hoy);
+
+      console.log('Meses trabajados como contratado:', mesesTrabajados);
+
+      // Si tiene menos de 12 meses, calcular proporcionalmente
+      if (mesesTrabajados < 12) {
+        // Regla de tres: 12 meses = 10 días, X meses = ? días
+        const diasCalculados = Math.floor((DIAS_POR_TIPO.Licencia.Contratado * mesesTrabajados) / 12);
+        console.log('Días calculados proporcionalmente:', diasCalculados);
+        return diasCalculados;
+      }
+
+      // Si tiene 12 meses o más, asignar días según configuración
+      console.log('Tiene 12 o más meses, asignando días según configuración');
+      return DIAS_POR_TIPO.Licencia.Contratado;
     }
 
-    // Para el resto, calcular años de antigüedad
+    // Para el resto de condiciones laborales, usar fechaInicioPlanta
     const hoy = new Date();
     const inicio = new Date(fechaInicioPlanta);
     const añosAntiguedad = Math.floor(
@@ -45,12 +66,19 @@ class ConfigService {
     }
 
     console.log('Días asignados según antigüedad:', diasCalculados);
+    return await this.actualizarDiasLicencia(operadorId, diasCalculados);
+  }
 
-    // Calcular días restantes considerando licencias ya tomadas para el año activo
-    const diasRestantes = await this.calcularDiasRestantes(operadorId, diasCalculados);
-    console.log('Días restantes después de descontar licencias:', diasRestantes);
+  calcularMesesTrabajados(fechaInicio, fechaFin) {
+    const mesesDiferencia = (fechaFin.getFullYear() - fechaInicio.getFullYear()) * 12 + 
+                           (fechaFin.getMonth() - fechaInicio.getMonth());
     
-    return await this.actualizarDiasLicencia(operadorId, diasRestantes);
+    // Si el día del mes final es menor que el día del mes inicial, restar un mes
+    if (fechaFin.getDate() < fechaInicio.getDate()) {
+      return Math.max(0, mesesDiferencia - 1);
+    }
+    
+    return Math.max(0, mesesDiferencia);
   }
 
   calcularAñosAntiguedad(fechaInicio, fechaActual) {

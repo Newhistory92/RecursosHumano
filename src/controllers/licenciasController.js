@@ -1,5 +1,5 @@
 const licenciasService = require('../licenciasService/licenciasService');
-const actualizacionService = require('../automatizacion/licenciasAuto');
+
 
 const licenciasController = {
   async getResumenLicencias(req, res) {
@@ -14,7 +14,5 @@ const licenciasController = {
   }
 };
 
-// Iniciar la actualización automática al arrancar el servidor
-// actualizacionService.iniciarActualizacionAutomatica();
 
 module.exports = licenciasController;
