@@ -31,9 +31,17 @@ const TIPOS_LICENCIA = [
   const ACTUALIZACION_DIARIA = '0 0 * * *'; // Todos los días a medianoche
   const ACTUALIZACION_OCTUBRE = '0 0 1 10 *'; // 1 de octubre a medianoche
   
+  const HORAS_POR_CONDICION = {
+    'Contratado':6,
+    'Planta_Permanente': 7,
+    'Medico': 6,
+    // Agregar otras condiciones según sea necesario
+  };
+
   module.exports = {
     TIPOS_LICENCIA,
     DIAS_POR_TIPO,
     ACTUALIZACION_DIARIA,
-    ACTUALIZACION_OCTUBRE
+    ACTUALIZACION_OCTUBRE,
+    HORAS_POR_CONDICION
   };

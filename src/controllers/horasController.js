@@ -1,7 +1,9 @@
 const sql = require("mssql")
-const { dbConfig } = require('../config/configbd');
+const { dbConfig, getConnection } = require('../config/configbd');
 const sincronizacionService = require('../services/sincronizacionService');
+const horasService = require('../services/horasService');
 const schedule = require('node-schedule');
+const { validarOperadorId } = require('../utils/validaciones');
 
 async function calcularYActualizarHorasExtra() {
     try {
@@ -62,43 +64,108 @@ cron.schedule('*/30 * * * *', () => {
 
 class HorasController {
   constructor() {
-    // Programar sincronización diaria a las 00:00
-    schedule.scheduleJob('0 0 * * *', async () => {
-      console.log('Iniciando sincronización automática');
+    // Bind de los métodos para mantener el contexto
+    this.obtenerResumen = this.obtenerResumen.bind(this);
+    this.sincronizarHoras = this.sincronizarHoras.bind(this);
+    this.actualizarHorasExtra = this.actualizarHorasExtra.bind(this);
+
+    // Programar sincronización cada minuto
+    schedule.scheduleJob('*/1 * * * *', async () => {
+      console.log('Iniciando sincronización automática:', new Date().toISOString());
       try {
-        await sincronizacionService.sincronizarRegistrosDiarios();
+        await this.sincronizarHoras();
       } catch (error) {
         console.error('Error en sincronización automática:', error);
       }
     });
   }
 
-  async obtenerResumen(req, res) {
+  async actualizarHorasExtra(req, res) {
     try {
       const { operadorId } = req.params;
-      const resumen = await sincronizacionService.obtenerResumenOperador(operadorId);
-      res.json(resumen);
+      const { horasExtra } = req.body;
+
+      if (!validarOperadorId(operadorId)) {
+        return res.status(400).json({
+          error: 'ID de operador inválido',
+          mensaje: `El ID del operador '${operadorId}' no tiene un formato válido`
+        });
+      }
+
+      const pool = await getConnection();
+      await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+        .input('horasExtra', sql.Float, horasExtra)
+        .query(`
+          UPDATE HorasTrabajadas
+          SET horasExtra = @horasExtra,
+              updatedAt = GETDATE()
+          WHERE operadorId = @operadorId
+        `);
+
+      res.json({
+        mensaje: 'Horas extra actualizadas correctamente',
+        operadorId,
+        horasExtra
+      });
+
     } catch (error) {
-      console.error('Error obteniendo resumen:', error);
-      res.status(500).json({ 
-        error: 'Error obteniendo resumen',
-        mensaje: error.message 
+      console.error('Error actualizando horas extra:', error);
+      res.status(500).json({
+        error: 'Error actualizando horas extra',
+        mensaje: error.message
       });
     }
   }
 
-  async sincronizarManual(req, res) {
+  async obtenerResumen(req, res) {
+    try {
+      const { operadorId } = req.params;
+      console.log('Recibido operadorId:', operadorId, 'tipo:', typeof operadorId);
+
+      if (!validarOperadorId(operadorId)) {
+        return res.status(400).json({
+          error: 'ID de operador inválido',
+          mensaje: `El ID del operador '${operadorId}' no tiene un formato válido`,
+          formatoEsperado: 'Alfanumérico con guiones permitidos'
+        });
+      }
+
+      const resumen = await sincronizacionService.obtenerResumenOperador(operadorId);
+      res.json(resumen);
+
+    } catch (error) {
+      console.error('Error en obtenerResumen:', error);
+      res.status(500).json({
+        error: 'Error obteniendo resumen',
+        mensaje: error.message
+      });
+    }
+  }
+
+  async sincronizarHoras(req, res) {
     try {
       const resultado = await sincronizacionService.sincronizarRegistrosDiarios();
-      res.json(resultado);
+      
+      if (res) { // Si es llamado como endpoint
+        res.json({
+          mensaje: 'Sincronización completada',
+          resultado
+        });
+      } else { // Si es llamado por el scheduler
+        console.log('Sincronización automática completada:', resultado);
+      }
     } catch (error) {
-      console.error('Error en sincronización manual:', error);
-      res.status(500).json({ 
-        error: 'Error en sincronización',
-        mensaje: error.message 
-      });
+      console.error('Error en sincronizarHoras:', error);
+      if (res) {
+        res.status(500).json({
+          error: 'Error en sincronización',
+          mensaje: error.message
+        });
+      }
     }
   }
 }
 
-module.exports = new HorasController();
+// Exportar una instancia de la clase
+module.exports = HorasController;

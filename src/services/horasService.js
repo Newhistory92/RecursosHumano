@@ -1,6 +1,7 @@
 const { getConnection } = require('../config/configbd');
 const sql = require('mssql');
 const moment = require('moment');
+const { HORAS_POR_CONDICION } = require('../utils/type');
 
 class HorasService {
   constructor() {
@@ -11,16 +12,11 @@ class HorasService {
     this.TOLERANCIA_MINUTOS = 15;
   }
 
-  calcularMinutosDebidos(horaEntradaReal, horaEntradaEsperada) {
-    const entrada = moment(horaEntradaReal, 'HH:mm:ss');
-    const esperada = moment(horaEntradaEsperada, 'HH:mm:ss');
-    const tolerancia = esperada.clone().add(this.TOLERANCIA_MINUTOS, 'minutes');
-
-    if (entrada.isSameOrBefore(tolerancia)) {
-      return 0;
-    }
-
-    return entrada.diff(tolerancia, 'minutes');
+  calcularMinutosDebidos(horaEntrada, horaEntradaEsperada) {
+    if (!horaEntradaEsperada) return 0;
+    const entrada = new Date(horaEntrada);
+    const esperada = new Date(horaEntradaEsperada);
+    return entrada > esperada ? Math.round((entrada - esperada) / (1000 * 60)) : 0;
   }
 
   calcularHorasExtra(horaEntrada, horaSalida, horasRequeridas) {
@@ -59,36 +55,83 @@ class HorasService {
     return this.HORAS_POR_CONDICION[condicionLaboral] || null;
   }
 
-  async registrarHorasTrabajadas(operadorId, fecha, horaEntrada, horaSalida) {
-    const pool = await getConnection();
-    const horasRequeridas = await this.obtenerHorasRequeridas(operadorId);
-    const horasExtra = this.calcularHorasExtra(horaEntrada, horaSalida, horasRequeridas || 0);
+  async registrarHorasTrabajadas(operadorId, primerRegistro, horasTotales, condicionLaboral) {
+    try {
+      const pool = await getConnection();
 
-    await pool.request()
-      .input('operadorId', sql.VarChar, operadorId)
-      .input('fecha', sql.Date, fecha)
-      .input('horaEntrada', sql.Time, horaEntrada)
-      .input('horaSalida', sql.Time, horaSalida)
-      .input('horasExtra', sql.Float, horasExtra)
-      .query(`
-        INSERT INTO HorasTrabajadas (
-          operadorId, horaEntrada, horaSalida, 
-          horasExtra, createdAt, updatedAt
-        )
-        VALUES (
-          @operadorId, @horaEntrada, @horaSalida,
-          @horasExtra, GETDATE(), GETDATE()
-        )
-      `);
+      // 1. Obtener hora de entrada configurada y horas extra actuales
+      const result = await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+        .query(`
+          SELECT horaEntrada, horasExtra
+          FROM HorasTrabajadas
+          WHERE operadorId = @operadorId
+        `);
 
-    return {
-      operadorId,
-      fecha,
-      horaEntrada,
-      horaSalida,
-      horasExtra,
-      horasRequeridas
-    };
+      if (!result.recordset[0]) {
+        throw new Error(`No se encontró configuración para el operador ${operadorId}`);
+      }
+
+      const { horaEntrada, horasExtra = 0 } = result.recordset[0];
+
+      // 2. Calcular minutos de retraso
+      const minutosDebidos = this.calcularMinutosDebidos(horaEntrada, primerRegistro);
+      const horasDebidas = minutosDebidos / 60; // Convertir minutos a horas
+
+      // 3. Obtener horas requeridas según condición laboral
+      const horasRequeridas = HORAS_POR_CONDICION[condicionLaboral] || 8;
+
+      // 4. Calcular diferencia entre horas trabajadas y requeridas
+      let diferencia = horasTotales - horasRequeridas - horasDebidas;
+
+      // 5. Ajustar horas extra
+      let nuevasHorasExtra = this.calcularNuevasHorasExtra(horasExtra, diferencia);
+
+      // 6. Actualizar registro
+      await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+        .input('horasExtra', sql.Float, nuevasHorasExtra)
+        .input('minutosDebidos', sql.Int, minutosDebidos)
+        .query(`
+          UPDATE HorasTrabajadas
+          SET horasExtra = @horasExtra,
+              minutosDebidos = @minutosDebidos,
+              updatedAt = GETDATE()
+          WHERE operadorId = @operadorId
+        `);
+
+      return {
+        operadorId,
+        minutosDebidos,
+        horasTotales,
+        horasRequeridas,
+        horasExtra: nuevasHorasExtra
+      };
+
+    } catch (error) {
+      console.error('Error en registrarHorasTrabajadas:', error);
+      throw error;
+    }
+  }
+
+  calcularNuevasHorasExtra(horasExtraActuales, diferencia) {
+    // Si la diferencia es positiva, sumar a las horas extra
+    if (diferencia > 0) {
+      return horasExtraActuales + diferencia;
+    }
+
+    // Si la diferencia es negativa, intentar compensar con horas extra existentes
+    if (horasExtraActuales > 0) {
+      // Si hay suficientes horas extra para compensar
+      if (horasExtraActuales >= Math.abs(diferencia)) {
+        return horasExtraActuales + diferencia;
+      }
+      // Si no hay suficientes horas extra, quedan en negativo
+      return 0;
+    }
+
+    // Si no hay horas extra y la diferencia es negativa, acumular en negativo
+    return horasExtraActuales + diferencia;
   }
 
   async obtenerResumenSemanal(operadorId) {

@@ -8,16 +8,6 @@ class AccessDBService {
 
   async getSystemLogsPorDia(fecha) {
     try {
-      // Si no se pasa una fecha, se utiliza la fecha actual
-      if (!fecha) {
-        const today = new Date();
-        const day = today.getDate();
-        const month = today.getMonth() + 1; // Los meses en JS son 0-indexados
-        const year = today.getFullYear();
-        // Formateamos en d/m/yyyy (sin ceros a la izquierda)
-        fecha = `${day}/${month}/${year}`;
-      }
-
       const query = `
         SELECT 
           ID,

@@ -1,10 +1,10 @@
 const express = require("express")
 const cors = require("cors")
+const { initializeDatabase, testConnection, closeConnection } = require('../config/configbd');
 
 const licenciasRoutes = require("../routes/licenciasRoutes")
- const horasRoutes = require("../routes/horasRoutes")
+const horasRoutes = require("../routes/horasRoutes")
 const errorHandler = require("../middleware/errorHandler")
-const { testConnection } = require("../config/configbd");
 require("dotenv").config()
 
 const app = express()
@@ -17,7 +17,7 @@ app.use(cors({
   credentials: true
 }))
 app.use(express.json())
-testConnection();
+
 // Routes
 
 app.use("/api/licencias", licenciasRoutes)
@@ -32,37 +32,43 @@ app.use(errorHandler)
 
 const PORT = process.env.PORT || 3008
 
-const server = app.listen(PORT, () => {
-  console.log(`
-🚀 Servidor iniciado exitosamente:
+async function startServer() {
+  try {
+    // Probar conexión e inicializar la base de datos
+    await testConnection();
+    await initializeDatabase();
+
+    const server = app.listen(PORT, () => {
+      console.log(`🚀 Servidor iniciado exitosamente:
    - Puerto: ${PORT}
    - Modo: ${process.env.NODE_ENV}
-   - Hora: ${new Date().toLocaleString()}
-📅 Actualizaciones automáticas programadas para las 16:00
-  `)
-})
+   - Hora: ${new Date().toLocaleString()}`);
+    });
 
-process.on("uncaughtException", (error) => {
-  console.error("Error no capturado:", error);
-});
+    // Manejo de señales de terminación
+    async function gracefulShutdown() {
+      console.log("Iniciando apagado graceful...");
+      await closeConnection();
+      server.close(() => {
+        console.log("Servidor cerrado.");
+        process.exit(0);
+      });
+    }
 
-process.on("unhandledRejection", (error) => {
-  console.error("Promesa rechazada no manejada:", error);
-});
+    process.on("SIGTERM", gracefulShutdown);
+    process.on("SIGINT", gracefulShutdown);
 
-// Manejo de señales de terminación
-process.on("SIGTERM", () => {
-  console.log("Recibida señal SIGTERM. Cerrando servidor...")
-  server.close(() => {
-    console.log("Servidor cerrado.")
-    process.exit(0)
-  })
-})
+    process.on("uncaughtException", (error) => {
+      console.error("Error no capturado:", error);
+    });
 
-process.on("SIGINT", () => {
-  console.log("Recibida señal SIGINT. Cerrando servidor...")
-  server.close(() => {
-    console.log("Servidor cerrado.")
-    process.exit(0)
-  })
-})
+    process.on("unhandledRejection", (error) => {
+      console.error("Promesa rechazada no manejada:", error);
+    });
+  } catch (error) {
+    console.error('Error al iniciar el servidor:', error);
+    process.exit(1);
+  }
+}
+
+startServer();

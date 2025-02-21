@@ -110,6 +110,24 @@ WHERE id = @operadorId
     SET tipo = 'Activo',
         updatedAt = GETDATE()
     WHERE operadorId = @operadorId
+  `,
+
+  crearTablaHorasTrabajadas: `
+    IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[registrarHorasTrabajadas]') AND type in (N'U'))
+    BEGIN
+      CREATE TABLE [dbo].[registrarHorasTrabajadas](
+        [id] [int] IDENTITY(1,1) PRIMARY KEY,
+        [idReloj] [varchar](50) NOT NULL,
+        [fecha] [date] NOT NULL,
+        [horaEntrada] [time](7) NULL,
+        [horaSalida] [time](7) NULL,
+        [createdAt] [datetime] NOT NULL DEFAULT GETDATE(),
+        [updatedAt] [datetime] NOT NULL DEFAULT GETDATE()
+      )
+
+      CREATE INDEX [IX_registrarHorasTrabajadas_idReloj] ON [dbo].[registrarHorasTrabajadas]([idReloj])
+      CREATE INDEX [IX_registrarHorasTrabajadas_fecha] ON [dbo].[registrarHorasTrabajadas]([fecha])
+    END
   `
 };
 
