@@ -25,8 +25,8 @@ class SincronizacionService {
   }
 
   async sincronizarRegistrosDiarios() {
-    try {
-      // Obtener registros desde Access
+    try { 
+     
       const logs = await accessDBService.getSystemLogsPorDia();
       
       if (!logs.length) {
@@ -34,59 +34,67 @@ class SincronizacionService {
         return;
       }
 
-      // Agrupar registros por ID y ordenarlos por LogTime
-      const registrosPorId = {};
+      // Agrupar registros por USERID
+      const registrosPorUsuario = {};
       logs.forEach(log => {
-        if (!registrosPorId[log.id]) {
-          registrosPorId[log.id] = [];
+        if (!registrosPorUsuario[log.userid]) {
+          registrosPorUsuario[log.userid] = [];
         }
-        registrosPorId[log.id].push({
-          ...log,
-          logTime: new Date(log.logTime)
+        registrosPorUsuario[log.userid].push({
+          fecha: log.fecha,
+          hora: log.hora,
+          logTime: log.logTime
         });
       });
 
       // Procesar cada grupo de registros
-      for (const [id, registros] of Object.entries(registrosPorId)) {
-        // Ordenar registros por tiempo
-        registros.sort((a, b) => a.logTime - b.logTime);
+      for (const [userid, registros] of Object.entries(registrosPorUsuario)) {
+        // Ordenar registros por hora
+        registros.sort((a, b) => {
+          const horaA = moment(a.hora, 'HH:mm:ss');
+          const horaB = moment(b.hora, 'HH:mm:ss');
+          return horaA - horaB;
+        });
         
-        // Obtener operador asociado al ID del reloj
-        const operadores = await this.obtenerOperadoresPorIdReloj(id);
+        const operadores = await this.obtenerOperadoresPorIdReloj(userid);
         
-        if (!operadores.length) {
-          console.log(`No se encontró operador para el ID de reloj: ${id}`);
-          continue;
-        }
+        if (!operadores.length) continue;
 
         // Calcular horas trabajadas
         let horasTotales = 0;
         for (let i = 0; i < registros.length - 1; i += 2) {
-          const entrada = registros[i].logTime;
-          const salida = registros[i + 1]?.logTime;
+          const entrada = moment(registros[i].hora, 'HH:mm:ss');
+          const salida = registros[i + 1] ? moment(registros[i + 1].hora, 'HH:mm:ss') : null;
           
           if (salida) {
-            const diferencia = (salida - entrada) / (1000 * 60 * 60); // Convertir a horas
+            const diferencia = salida.diff(entrada, 'hours', true);
             horasTotales += diferencia;
           }
         }
-
-        // Para cada operador encontrado con ese ID de reloj
+             
+        // Convertir horasTotales a formato HH:mm
+        const horasRedondeadas = Math.floor(horasTotales);
+        const minutos = Math.ceil((horasTotales - horasRedondeadas) * 60);
+        const horasFinales = minutos === 60 ? horasRedondeadas + 1 : horasRedondeadas;
+        const minutosFinales = minutos === 60 ? 0 : minutos;
+        const horasTotalesFormateadas = `${String(horasFinales).padStart(2, '0')}:${String(minutosFinales).padStart(2, '0')}`;
+        
+        console.log(`Horas Totales Redondeadas: ${ horasTotalesFormateadas}`);
+        // Registrar para cada operador
         for (const operador of operadores) {
           const { operadorId, condicionLaboral } = operador;
-          const primerRegistro = registros[0].logTime;
-
-          // Registrar las horas trabajadas
+        
+        
           await horasService.registrarHorasTrabajadas(
             operadorId,
-            moment(primerRegistro).format('HH:mm:ss'),
-            horasTotales,
+            registros[0].hora,  // Primera hora de entrada
+            horasTotalesFormateadas,
             condicionLaboral
           );
         }
       }
 
-      console.log("Sincronización completada exitosamente");
+      return { success: true, mensaje: 'Sincronización completada' };
     } catch (error) {
       console.error("Error sincronizando registros diarios:", error);
       throw error;

@@ -6,9 +6,9 @@ const HorasController = require('../controllers/horasController');
 const horasController = new HorasController();
 
 // Definir las rutas
-router.get('/resumen/:operadorId', horasController.obtenerResumen);
+router.get('/resumen/:operadorId', horasController.obtenerResumenHoras);
 router.post('/sincronizar', horasController.sincronizarHoras);
-router.put('/horasExtra/:operadorId', horasController.actualizarHorasExtra);
+//router.put('/horasExtra/:operadorId', horasController.actualizarHorasExtra);
 
 module.exports = router;
 
