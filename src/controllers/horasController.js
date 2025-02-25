@@ -1,5 +1,5 @@
 const sql = require("mssql");
-const { dbConfig, getConnection } = require('../config/configbd');
+const { getConnection } = require('../config/configbd');
 const sincronizacionService = require('../services/sincronizacionService');
 const schedule = require('node-schedule');
 const { validarOperadorId } = require('../utils/validaciones');
@@ -9,13 +9,16 @@ class HorasController {
     // Bind de los métodos
     this.obtenerResumenHoras = this.obtenerResumenHoras.bind(this);
     this.sincronizarHoras = this.sincronizarHoras.bind(this);
+    this.agregarAusencia = this.agregarAusencia.bind(this);
+    this.eliminarAusencia = this.eliminarAusencia.bind(this);
+    this.justificarAusencia = this.justificarAusencia.bind(this);
+    this.listarAusencias = this.listarAusencias.bind(this);
 
     // Programar sincronización cada minuto
     schedule.scheduleJob('*/1 * * * *', async () => {
       try {
-        // Usar fecha estática por ahora
-        const fecha = "22/04/2022";
-        await sincronizacionService.sincronizarRegistrosDiarios(fecha);
+        // Fecha estática para pruebas
+        await this.sincronizarHoras(); // Usar el mismo método para mantener consistencia
       } catch (error) {
         console.error('Error en sincronización automática:', error);
       }
@@ -67,10 +70,8 @@ class HorasController {
   // Función para sincronizar horas con la fecha actual
   async sincronizarHoras(req, res) {
     try {
-      // Usar fecha estática en lugar de fecha actual
-      const fecha = "22/04/2022";
-      // const fechaActual = new Date().toISOString().split('T')[0]; // Comentado por ahora
-      
+      //const fechaActual = new Date().toISOString().split('T')[0];
+      const fecha = "22/04/2022"; // Fecha estática para pruebas
       const resultado = await sincronizacionService.sincronizarRegistrosDiarios(fecha);
       
       if (res) {
@@ -98,6 +99,223 @@ class HorasController {
     const minutos = Math.round((decimal - horas) * 60);
     return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
   }
+
+
+// Agregar ausencia: inserta en HistorialAusencias la fecha indicada con justificado = false
+
+async agregarAusencia(req, res) {
+  try {
+      const { operadorId, fecha, condicionLaboral } = req.body;
+
+      if (!operadorId || !fecha || !condicionLaboral) {
+          return res.status(400).json({ error: 'Faltan parámetros: operadorId, fecha y condicionLaboral son requeridos' });
+      }
+
+      console.log(`Agregando ausencia para operador ${operadorId} en la fecha ${fecha}`);
+
+      const pool = await getConnection();
+
+      // Insertar ausencia (justificado = false por defecto)
+      await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .input('fecha', sql.Date, fecha)
+          .query(`
+              INSERT INTO HistorialAusencias (operadorId, fecha, justificado, createdAt)
+              VALUES (@operadorId, @fecha, 0, GETDATE())
+          `);
+
+      console.log(`Ausencia insertada para operador ${operadorId} en la fecha ${fecha}`);
+
+      // Obtener horasExtra actual desde HorasTrabajadas
+      const resHoras = await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .query(`SELECT horasExtra FROM HorasTrabajadas WHERE operadorId = @operadorId`);
+
+      let horasExtraActuales = resHoras.recordset[0] ? (resHoras.recordset[0].horasExtra || 0) : 0;
+
+      // Definir horas a sumar según la condición laboral
+      const HORAS_POR_CONDICION = {
+          'Contratado': 6,
+          'Planta_Permanente': 7
+      };
+
+      const horasASumar = HORAS_POR_CONDICION[condicionLaboral] || 0;
+      const nuevasHorasExtra = horasExtraActuales + horasASumar;
+
+      // Actualizar HorasTrabajadas con las nuevas horas extra
+      await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .input('horasExtra', sql.Int, nuevasHorasExtra)
+          .query(`
+              UPDATE HorasTrabajadas 
+              SET horasExtra = @horasExtra 
+              WHERE operadorId = @operadorId
+          `);
+
+      console.log(`Horas extra actualizadas a ${nuevasHorasExtra} para operador ${operadorId}`);
+
+      res.status(200).json({ mensaje: 'Ausencia agregada y horas extra actualizadas correctamente' });
+
+  } catch (error) {
+      console.error('Error al agregar ausencia:', error);
+      res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+
+async justificarAusencia(req, res) {
+  try {
+      const { operadorId, fecha, justificado, condicionLaboral } = req.body;
+
+      if (!operadorId || !fecha || typeof justificado !== 'boolean' || !condicionLaboral) {
+          return res.status(400).json({ error: 'Faltan parámetros: operadorId, fecha, justificado y condicionLaboral son requeridos' });
+      }
+
+      console.log(`Actualizando ausencia para operador ${operadorId} en la fecha ${fecha} a justificado = ${justificado}`);
+
+      const pool = await getConnection();
+
+      // Actualizar el registro en HistorialAusencias
+      await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .input('fecha', sql.Date, fecha)
+          .input('justificado', sql.Bit, justificado)
+          .query(`
+              UPDATE HistorialAusencias
+              SET justificado = @justificado
+              WHERE operadorId = @operadorId AND CONVERT(date, fecha) = @fecha
+          `);
+
+      console.log(`Ausencia actualizada para operador ${operadorId} en fecha ${fecha}, justificado: ${justificado}`);
+
+      if (justificado) {
+          // Obtener las horas extra actuales
+          const resHoras = await pool.request()
+              .input('operadorId', sql.VarChar, operadorId)
+              .query(`SELECT horasExtra FROM HorasTrabajadas WHERE operadorId = @operadorId`);
+
+          let horasExtraActuales = resHoras.recordset[0] ? (resHoras.recordset[0].horasExtra || 0) : 0;
+
+          // Definir horas a restar según la condición laboral
+          const HORAS_POR_CONDICION = {
+              'Contratado': 6,
+              'Planta_Permanente': 7
+          };
+
+          const horasARestar = HORAS_POR_CONDICION[condicionLaboral] || 0;
+          const nuevasHorasExtra = Math.max(0, horasExtraActuales - horasARestar);
+
+          // Actualizar HorasTrabajadas eliminando la penalización
+          await pool.request()
+              .input('operadorId', sql.VarChar, operadorId)
+              .input('horasExtra', sql.Int, nuevasHorasExtra)
+              .query(`
+                  UPDATE HorasTrabajadas 
+                  SET horasExtra = @horasExtra 
+                  WHERE operadorId = @operadorId
+              `);
+
+          console.log(`Horas extra ajustadas a ${nuevasHorasExtra} para operador ${operadorId}`);
+      }
+
+      res.status(200).json({ mensaje: 'Ausencia actualizada y penalización de horas extra corregida' });
+
+  } catch (error) {
+      console.error('Error al justificar ausencia:', error);
+      res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+async listarAusencias(req, res) {
+  try {
+      const { operadorId } = req.params;
+
+      if (!operadorId) {
+          return res.status(400).json({ error: 'El parámetro operadorId es requerido' });
+      }
+
+      console.log(`Obteniendo lista de ausencias para operador ${operadorId}`);
+
+      const pool = await getConnection();
+
+      const result = await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .query(`
+              SELECT fecha, justificado, createdAt
+              FROM HistorialAusencias
+              WHERE operadorId = @operadorId
+              ORDER BY fecha DESC
+          `);
+
+      const ausencias = result.recordset;
+
+      res.status(200).json({ operadorId, ausencias });
+
+  } catch (error) {
+      console.error('Error al listar ausencias:', error);
+      res.status(500).json({ error: 'Error interno del servidor' });
+  }
+}
+
+  // Eliminar ausencia: elimina el registro de ausencia según operador y fecha
+  async eliminarAusencia(req, res) {
+    try {
+        const { operadorId, fecha, condicionLaboral } = req.body;
+
+        if (!operadorId || !fecha || !condicionLaboral) {
+            return res.status(400).json({ error: 'Faltan parámetros: operadorId, fecha y condicionLaboral son requeridos' });
+        }
+
+        console.log(`Eliminando ausencia para operador ${operadorId} en la fecha ${fecha}`);
+
+        const pool = await getConnection();
+
+        // Definir horas a restar según la condición laboral
+        const HORAS_POR_CONDICION = {
+            'Contratado': 6,
+            'Planta_Permanente': 7
+        };
+        const horasADescontar = HORAS_POR_CONDICION[condicionLaboral] || 0;
+
+        // Obtener horasExtra actual de HorasTrabajadas
+        const resHoras = await pool.request()
+            .input('operadorId', sql.VarChar, operadorId)
+            .query(`SELECT horasExtra FROM HorasTrabajadas WHERE operadorId = @operadorId`);
+        
+        let horasExtraActuales = resHoras.recordset[0] ? (resHoras.recordset[0].horasExtra || 0) : 0;
+
+        // Restar las horas correspondientes
+        const nuevasHorasExtra = Math.max(horasExtraActuales - horasADescontar, 0); // Evita valores negativos
+
+        await pool.request()
+            .input('operadorId', sql.VarChar, operadorId)
+            .input('horasExtra', sql.Int, nuevasHorasExtra)
+            .query(`
+                UPDATE HorasTrabajadas
+                SET horasExtra = @horasExtra
+                WHERE operadorId = @operadorId
+            `);
+
+        console.log(`Horas extra actualizadas para operador ${operadorId}. Nuevas horasExtra: ${nuevasHorasExtra}`);
+
+        // Eliminar la ausencia
+        await pool.request()
+            .input('operadorId', sql.VarChar, operadorId)
+            .input('fecha', sql.Date, fecha)
+            .query(`
+                DELETE FROM HistorialAusencias
+                WHERE operadorId = @operadorId AND CONVERT(date, fecha) = @fecha
+            `);
+
+        res.json({ mensaje: 'Ausencia eliminada correctamente y horasExtra actualizadas' });
+
+    } catch (error) {
+        console.error('Error en eliminarAusencia:', error);
+        res.status(500).json({ error: 'Error eliminando ausencia', mensaje: error.message });
+    }
+}
+
+
 }
 
 module.exports = HorasController;

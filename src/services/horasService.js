@@ -15,11 +15,11 @@ class HorasService {
     try {
       console.log("🚀 operadorId:", operadorId);
       console.log("🚀 horaEntrada enviada:", horaEntradaReal);
-      console.log("🚀 horasTotales:", horasTotales);
+      console.log("🚀 horasTotales en decimal:", horasTotales);
       console.log("🚀 condicionLaboral:", condicionLaboral);
   
       const pool = await getConnection();
-  
+     
       // Obtener hora de entrada y horas extra desde la BD
       const result = await pool.request()
         .input('operadorId', sql.VarChar, operadorId)
@@ -41,22 +41,22 @@ class HorasService {
       const horasRequeridas = this.HORAS_POR_CONDICION[condicionLaboral] || 8;
       console.log(`Horas requeridas para ${condicionLaboral}: ${horasRequeridas}`);
   
-      // Convertir horasTotales de "HH:mm" a decimal
-      const [horas, minutos] = horasTotales.split(':').map(Number);
-      const horasTotalesDecimal = horas + (minutos / 60);
-      console.log(`Horas trabajadas en decimal: ${horasTotalesDecimal}`);
+      // Validar que horasTotales sea un número
+      if (typeof horasTotales !== 'number' || isNaN(horasTotales)) {
+        throw new Error(`Valor inválido en horasTotales: ${horasTotales}`);
+      }
   
       // Calcular diferencia entre horas trabajadas y requeridas
-      const diferencia = horasTotalesDecimal - horasRequeridas;
+      const diferencia = horasTotales - horasRequeridas;
       console.log(`Diferencia de horas: ${diferencia}`);
   
       // Ajustar horas extra
       let horasExtraFinales = horasExtraActuales;
-      if (diferencia > 0) {
-        horasExtraFinales += diferencia;
-      } else if (diferencia < 0) {
-        horasExtraFinales = Math.max(0, horasExtraFinales + diferencia);
-      }
+        if (diferencia > 0) {
+            horasExtraFinales += diferencia; // Sumar si trabajó más horas
+        } else if (diferencia < 0) {
+            horasExtraFinales = horasExtraActuales + diferencia; // Ahora permite valores negativos
+        }
       console.log(`Horas extra finales: ${horasExtraFinales}`);
   
       // Actualizar horas extra en la BD
@@ -65,11 +65,22 @@ class HorasService {
         .input('horasExtra', sql.Float, horasExtraFinales)
         .query(`UPDATE HorasTrabajadas SET horasExtra = @horasExtra, updatedAt = GETDATE() WHERE operadorId = @operadorId`);
   
+        if (diferencia !== 0) {
+          const fechaActual = moment().format('DD-MM-YYYY');
+          await pool.request()
+              .input('operadorId', sql.VarChar, operadorId)
+              .input('fecha', sql.DateTime, fechaActual)
+              .input('horas', sql.Float, diferencia)
+              .query(`INSERT INTO RegistroHorasDiarias (operadorId, fecha, horas, createdAt) VALUES (@operadorId, @fecha, @horas, GETDATE())`);
+         
+      } 
+
+
       return {
         operadorId,
         minutosDebidos,
         horasRequeridas,
-        horasTotalesDecimal,
+        horasTrabajadas: horasTotales, // Mantiene la nomenclatura clara
         horasExtra: horasExtraFinales
       };
   
@@ -78,6 +89,7 @@ class HorasService {
       throw error;
     }
   }
+  
   
   calcularMinutosDebidos(horaEntradaReal, horaEntradaConfigurada) {
     const entrada = moment(horaEntradaReal, 'HH:mm:ss');

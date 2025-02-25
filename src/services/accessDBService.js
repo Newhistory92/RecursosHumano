@@ -21,7 +21,10 @@ class AccessDBService {
         ORDER BY CHECKTIME ASC
       `;
 
+   
+
       const logs = await this.connection.query(query);
+
 
       if (!logs || !logs.length) {
         console.log('No se encontraron registros para la fecha');
@@ -47,8 +50,8 @@ class AccessDBService {
         }
       });
 
-     // console.log('Registros procesados sin duplicados:', registrosUnicos);
-      //console.log(`Total de registros únicos encontrados: ${registrosUnicos.length}`);
+      console.log('Registros procesados sin duplicados:', registrosUnicos);
+      console.log(`Total de registros únicos encontrados: ${registrosUnicos.length}`);
 
       return registrosUnicos;
 
