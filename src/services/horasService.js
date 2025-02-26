@@ -6,7 +6,8 @@ class HorasService {
   constructor() {
     this.HORAS_POR_CONDICION = {
       'Contratado': 6,
-      'Planta_Permanente': 7
+      'Planta_Permanente': 7,
+      'Comisionado': null
     };
     this.TOLERANCIA_MINUTOS = 15;
   }
@@ -30,7 +31,7 @@ class HorasService {
       }
   
       let { horaEntrada, horasExtra: horasExtraActuales = 0 } = result.recordset[0];
-      horaEntrada = moment(horaEntrada).format('HH:mm:ss');
+      horaEntrada = moment(horaEntrada).format('HH:mm');
       console.log(`Hora de entrada configurada: ${horaEntrada}`);
   
       // Calcular minutos debidos
@@ -38,7 +39,7 @@ class HorasService {
       console.log(`Minutos debidos: ${minutosDebidos}`);
   
       // Obtener horas requeridas según condición
-      const horasRequeridas = this.HORAS_POR_CONDICION[condicionLaboral] || 8;
+      const horasRequeridas = this.HORAS_POR_CONDICION[condicionLaboral];
       console.log(`Horas requeridas para ${condicionLaboral}: ${horasRequeridas}`);
   
       // Validar que horasTotales sea un número
@@ -54,11 +55,17 @@ class HorasService {
       let horasExtraFinales = horasExtraActuales;
         if (diferencia > 0) {
             horasExtraFinales += diferencia; // Sumar si trabajó más horas
+
         } else if (diferencia < 0) {
+      if (condicionLaboral === "Comisionado") {
+        // Para Comisionado, las horas extra se suman solamente; si la diferencia es negativa, se ignora
+        console.log("Condición 'Comisionado': diferencia negativa ignorada.");
+      } else {
             horasExtraFinales = horasExtraActuales + diferencia; // Ahora permite valores negativos
         }
+      }
       console.log(`Horas extra finales: ${horasExtraFinales}`);
-  
+
       // Actualizar horas extra en la BD
       await pool.request()
         .input('operadorId', sql.VarChar, operadorId)
@@ -66,12 +73,12 @@ class HorasService {
         .query(`UPDATE HorasTrabajadas SET horasExtra = @horasExtra, updatedAt = GETDATE() WHERE operadorId = @operadorId`);
   
         if (diferencia !== 0) {
-          const fechaActual = moment().format('DD-MM-YYYY');
+          const fechaActual = moment().format('YYYY-MM-DD HH:mm:ss');
           await pool.request()
               .input('operadorId', sql.VarChar, operadorId)
               .input('fecha', sql.DateTime, fechaActual)
               .input('horas', sql.Float, diferencia)
-              .query(`INSERT INTO RegistroHorasDiarias (operadorId, fecha, horas, createdAt) VALUES (@operadorId, @fecha, @horas, GETDATE())`);
+              .query(`INSERT INTO RegistroHorasDiarias (operadorId, fecha, horas, updatedAt) VALUES (@operadorId, @fecha, @horas, GETDATE())`);
          
       } 
 

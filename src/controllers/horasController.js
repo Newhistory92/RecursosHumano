@@ -3,6 +3,7 @@ const { getConnection } = require('../config/configbd');
 const sincronizacionService = require('../services/sincronizacionService');
 const schedule = require('node-schedule');
 const { validarOperadorId } = require('../utils/validaciones');
+const reiniciarHorasExtraComisionado = require('../services/reiniciohoraExtra');
 
 class HorasController {
   constructor() {
@@ -13,9 +14,15 @@ class HorasController {
     this.eliminarAusencia = this.eliminarAusencia.bind(this);
     this.justificarAusencia = this.justificarAusencia.bind(this);
     this.listarAusencias = this.listarAusencias.bind(this);
+    this.getRegistroHorasDiarias = this.getRegistroHorasDiarias.bind(this);
 
+     // Programar el job para el primer día del mes a las 00:00
+     schedule.scheduleJob(
+      { hour: 0, minute: 0, dayOfMonth: 1, tz: 'America/Argentina/Buenos_Aires' }, 
+      reiniciarHorasExtraComisionado
+    );
     // Programar sincronización cada minuto
-    schedule.scheduleJob('*/1 * * * *', async () => {
+    schedule.scheduleJob({ hour: 22, minute: 0, tz: 'America/Argentina/Buenos_Aires' }, async () => {
       try {
         // Fecha estática para pruebas
         await this.sincronizarHoras(); // Usar el mismo método para mantener consistencia
@@ -70,9 +77,9 @@ class HorasController {
   // Función para sincronizar horas con la fecha actual
   async sincronizarHoras(req, res) {
     try {
-      //const fechaActual = new Date().toISOString().split('T')[0];
-      const fecha = "22/04/2022"; // Fecha estática para pruebas
-      const resultado = await sincronizacionService.sincronizarRegistrosDiarios(fecha);
+      const fechaActual = new Date().toISOString().split('T')[0];
+     // const fecha = "22/04/2022"; // Fecha estática para pruebas
+      const resultado = await sincronizacionService.sincronizarRegistrosDiarios(fechaActual);
       
       if (res) {
         res.json({
@@ -120,7 +127,7 @@ async agregarAusencia(req, res) {
           .input('operadorId', sql.VarChar, operadorId)
           .input('fecha', sql.Date, fecha)
           .query(`
-              INSERT INTO HistorialAusencias (operadorId, fecha, justificado, createdAt)
+              INSERT INTO HistorialAusencias (operadorId, fecha, justificado, updatedAt)
               VALUES (@operadorId, @fecha, 0, GETDATE())
           `);
 
@@ -136,7 +143,8 @@ async agregarAusencia(req, res) {
       // Definir horas a sumar según la condición laboral
       const HORAS_POR_CONDICION = {
           'Contratado': 6,
-          'Planta_Permanente': 7
+          'Planta_Permanente': 7,
+          'Comisionado': 0
       };
 
       const horasASumar = HORAS_POR_CONDICION[condicionLaboral] || 0;
@@ -241,7 +249,7 @@ async listarAusencias(req, res) {
       const result = await pool.request()
           .input('operadorId', sql.VarChar, operadorId)
           .query(`
-              SELECT fecha, justificado, createdAt
+              SELECT id,fecha, justificado, createdAt
               FROM HistorialAusencias
               WHERE operadorId = @operadorId
               ORDER BY fecha DESC
@@ -315,7 +323,35 @@ async listarAusencias(req, res) {
     }
 }
 
+async getRegistroHorasDiarias(req, res) {
+  try {
+      const { operadorId } = req.params;
+
+      if (!operadorId) {
+          return res.status(400).json({ error: "El operadorId es requerido" });
+      }
+
+      const pool = await getConnection();
+      const result = await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .query(`
+              SELECT TOP 10 * 
+              FROM RegistroHorasDiarias
+              WHERE operadorId = @operadorId
+              ORDER BY fecha DESC
+          `);
+
+      return res.status(200).json(result.recordset);
+  } catch (error) {
+      console.error('❌ Error en getRegistroHorasDiarias:', error);
+      return res.status(500).json({ error: "Error interno del servidor" });
+  }
+}
+
+
+
 
 }
 
 module.exports = HorasController;
+

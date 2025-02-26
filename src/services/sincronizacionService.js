@@ -72,6 +72,42 @@ class SincronizacionService {
           continue;
         }
 
+        if (!operadores.length) {
+          // Caso: operador ausente
+          console.log(`No se encontró operador para USERID ${userid}. Se marca ausencia.`);
+          const pool = await getConnection();
+
+          // Registrar en HistorialAusencias
+          await pool.request()
+            .input('operadorId', sql.VarChar, userid)
+            .input('fecha', sql.Date, fecha)
+            .query(`
+              INSERT INTO HistorialAusencias (operadorId, fecha, justificado, createdAt)
+              VALUES (@operadorId, @fecha, 0, GETDATE())
+            `);
+          console.log(`Historial de ausencias insertado para operador ${userid} en fecha ${fecha}`);
+
+          // Actualizar HorasTrabajadas: extraer horasExtra actual y sumar la penalización
+          const penaltyHoras = this.HORAS_POR_CONDICION['Contratado'] || 6;  // Se asume 'Contratado' si no hay datos
+          const resHoras = await pool.request()
+            .input('operadorId', sql.VarChar, userid)
+            .query(`SELECT horasExtra FROM HorasTrabajadas WHERE operadorId = @operadorId`);
+          let horasExtraActuales = resHoras.recordset[0] ? (resHoras.recordset[0].horasExtra || 0) : 0;
+          const nuevasHorasExtra = horasExtraActuales + penaltyHoras;
+          await pool.request()
+            .input('operadorId', sql.VarChar, userid)
+            .input('horasExtra', sql.Float, nuevasHorasExtra)
+            .query(`
+              UPDATE HorasTrabajadas
+              SET horasExtra = @horasExtra, updatedAt = GETDATE()
+              WHERE operadorId = @operadorId
+            `);
+          console.log(`Para operador ausente ${userid}, se actualizó horasExtra a: ${nuevasHorasExtra}`);
+          continue; // Pasar al siguiente grupo de registros
+        }
+
+
+
         // Calcular horas trabajadas
         let horasTotales = 0;
             for (let i = 0; i < registros.length - 1; i += 2) {

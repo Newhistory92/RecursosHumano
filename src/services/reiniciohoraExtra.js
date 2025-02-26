@@ -91,7 +91,7 @@ async function reiniciarHorasExtraComisionado() {
   }
 }
 
-// Programar el job para el primer día del mes a las 00:00
-schedule.scheduleJob('0 0 1 * *', reiniciarHorasExtraComisionado);
 
-module.exports = { reiniciarHorasExtraComisionado };
+
+
+module.exports =  reiniciarHorasExtraComisionado ;

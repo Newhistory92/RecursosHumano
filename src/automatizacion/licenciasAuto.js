@@ -1,7 +1,7 @@
 const schedule = require('node-schedule');
 const { getConnection } = require('../config/configbd');
 const { QUERIES } = require('../utils/queries');
-const { TIPOS_LICENCIA, ACTUALIZACION_DIARIA, ACTUALIZACION_OCTUBRE } = require('../utils/type');
+const { TIPOS_LICENCIA } = require('../utils/type');
 const licenciasService = require('../licenciasService/licenciasService');
 const ConfigService = require('../config/serverLicencia');
 const sql = require('mssql');
@@ -142,7 +142,9 @@ class ActualizacionService {
 
   iniciarActualizacionAutomatica() {
     // Actualización diaria a medianoche
-    schedule.scheduleJob(ACTUALIZACION_DIARIA, async () => {
+    schedule.scheduleJob(
+      { hour: 0, minute: 0, tz: 'America/Argentina/Buenos_Aires' }, 
+      async () => {
       console.log('Iniciando actualización diaria de licencias');
       try {
         await this.actualizacionDiaria();
@@ -152,7 +154,9 @@ class ActualizacionService {
     });
 
     // Actualización especial el 1 de octubre
-    schedule.scheduleJob(ACTUALIZACION_OCTUBRE, async () => {
+    schedule.scheduleJob(
+      { hour: 0, minute: 0, dayOfMonth: 1, month: 10, tz: 'America/Argentina/Buenos_Aires' }, 
+      async () => {
       console.log('Iniciando actualización de octubre');
       try {
         await this.actualizacionOctubre();
@@ -164,7 +168,9 @@ class ActualizacionService {
 
   iniciarActualizacionDiaria() {
     // Ejecutar todos los días a las 00:00
-    schedule.scheduleJob(ACTUALIZACION_DIARIA, async () => {
+    schedule.scheduleJob(
+      { hour: 0, minute: 0, tz: 'America/Argentina/Buenos_Aires' }, 
+      async () => {
       console.log('Iniciando actualización diaria de estados de licencias');
       await this.actualizarEstadosLicencias();
     });
