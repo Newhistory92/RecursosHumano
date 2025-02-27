@@ -25,15 +25,29 @@ WHERE id = @operadorId
     JOIN Personal p ON o.id = p.operadorId
   `,
 
-  getTotalUsado: `
-    SELECT COALESCE(SUM(cantidad), 0) as totalUsado
-    FROM Licencias
-    WHERE operadorId = @operadorId
-    AND tipo = @tipo
-    AND anio = @anio
-     AND estado = 'Aprobado'
-  `,
- // AND estado = 'APROBADA'
+  getUsoLicencias: `
+  SELECT totalUsado 
+  FROM UsoLicencias
+  WHERE operadorId = @operadorId AND tipo = @tipo AND anio = @anio
+`,
+updateTotalUsado: `
+  UPDATE UsoLicencias 
+  SET totalUsado = @totalUsado, updatedAt = GETDATE()
+  WHERE operadorId = @operadorId AND tipo = @tipo AND anio = @anio
+`,
+insertTotalUsado: `
+  INSERT INTO UsoLicencias (operadorId, tipo, anio, totalUsado, updatedAt)
+  VALUES (@operadorId, @tipo, @anio, @totalUsado, GETDATE())
+`,
+
+  insertLicencia: `
+       INSERT INTO Licencias (
+  operadorId, fechaInicio, fechaFin, cantidad, tipo, estado, anio, updatedAt
+)
+OUTPUT INSERTED.id
+VALUES (
+  @operadorId, @fechaInicio, @fechaFin, @cantidad, @tipo, 'Aprobado', @anio, GETDATE()
+)`,
 
 //
   getHistorialLicencias: `

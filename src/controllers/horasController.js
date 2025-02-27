@@ -173,66 +173,94 @@ async agregarAusencia(req, res) {
 
 async justificarAusencia(req, res) {
   try {
-      const { operadorId, fecha, justificado, condicionLaboral } = req.body;
+    // Extraer ausenciaId desde los parámetros y justificado, condicionLaboral, fechaJustificada, operadorId desde el body
+    const { ausenciaId } = req.params;
+    const { justificado, condicionLaboral, fechaJustificada, operadorId } = req.body;
 
-      if (!operadorId || !fecha || typeof justificado !== 'boolean' || !condicionLaboral) {
-          return res.status(400).json({ error: 'Faltan parámetros: operadorId, fecha, justificado y condicionLaboral son requeridos' });
-      }
+    if (!ausenciaId || typeof justificado !== 'boolean' || !condicionLaboral || !operadorId) {
+      return res.status(400).json({ 
+        error: 'Faltan parámetros: ausenciaId, justificado, condicionLaboral y operadorId son requeridos' 
+      });
+    }
 
-      console.log(`Actualizando ausencia para operador ${operadorId} en la fecha ${fecha} a justificado = ${justificado}`);
+    console.log(`Actualizando ausencia ${ausenciaId} a justificado = ${justificado}`);
 
-      const pool = await getConnection();
+    const pool = await getConnection();
 
-      // Actualizar el registro en HistorialAusencias
+    // 🔍 Verificar si la fechaJustificada existe en Licencias
+    const result = await pool.request()
+      .input('fechaJustificada', sql.Date, fechaJustificada)
+      .query(`
+        SELECT COUNT(*) as existe 
+        FROM Licencias 
+        WHERE fecha = @fechaJustificada 
+        AND estado = 'Aprobado'
+      `);
+
+    if (result.recordset[0].existe === 0) {
+      return res.status(400).json({ error: 'La fecha no existe en Licencias' });
+    }
+
+    // ✅ Si existe la fecha en Licencias, actualizar la ausencia
+    await pool.request()
+      .input('ausenciaId', sql.Int, ausenciaId)
+      .input('justificado', sql.Bit, justificado)
+      .query(`
+        UPDATE HistorialAusencias
+        SET justificado = @justificado
+        WHERE id = @ausenciaId
+      `);
+
+    console.log(`Ausencia ${ausenciaId} actualizada, justificado: ${justificado}`);
+
+    // Si se marca como justificado, se procede a ajustar las horas extra
+    if (justificado) {
+      console.log(`Operador asociado a ausencia ${ausenciaId}: ${operadorId}`);
+
+      // Obtener las horasExtra actuales del operador
+      const resHoras = await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+        .query(`
+          SELECT horasExtra 
+          FROM HorasTrabajadas 
+          WHERE operadorId = @operadorId
+        `);
+
+      let horasExtraActuales = resHoras.recordset[0] ? (resHoras.recordset[0].horasExtra || 0) : 0;
+      console.log(`Horas extra actuales para operador ${operadorId}: ${horasExtraActuales}`);
+
+      // Definir la penalización según la condición laboral
+      const HORAS_POR_CONDICION = {
+        'Contratado': 6,
+        'Planta_Permanente': 7
+      };
+      const penalizacion = HORAS_POR_CONDICION[condicionLaboral] || 8;
+      console.log(`Aplicando penalización de ${penalizacion} horas para condición ${condicionLaboral}`);
+
+      // Calcular las nuevas horasExtra permitiendo que sean negativas
+      const nuevasHorasExtra = horasExtraActuales - penalizacion;
+      console.log(`Nuevas horasExtra para operador ${operadorId}: ${nuevasHorasExtra}`);
+
+      // Actualizar la tabla HorasTrabajadas con el nuevo valor de horasExtra
       await pool.request()
-          .input('operadorId', sql.VarChar, operadorId)
-          .input('fecha', sql.Date, fecha)
-          .input('justificado', sql.Bit, justificado)
-          .query(`
-              UPDATE HistorialAusencias
-              SET justificado = @justificado
-              WHERE operadorId = @operadorId AND CONVERT(date, fecha) = @fecha
-          `);
+        .input('operadorId', sql.VarChar, operadorId)
+        .input('horasExtra', sql.Float, nuevasHorasExtra)
+        .query(`
+          UPDATE HorasTrabajadas 
+          SET horasExtra = @horasExtra, updatedAt = GETDATE()
+          WHERE operadorId = @operadorId
+        `);
 
-      console.log(`Ausencia actualizada para operador ${operadorId} en fecha ${fecha}, justificado: ${justificado}`);
+      console.log(`Horas extra actualizadas para operador ${operadorId}`);
+    }
 
-      if (justificado) {
-          // Obtener las horas extra actuales
-          const resHoras = await pool.request()
-              .input('operadorId', sql.VarChar, operadorId)
-              .query(`SELECT horasExtra FROM HorasTrabajadas WHERE operadorId = @operadorId`);
-
-          let horasExtraActuales = resHoras.recordset[0] ? (resHoras.recordset[0].horasExtra || 0) : 0;
-
-          // Definir horas a restar según la condición laboral
-          const HORAS_POR_CONDICION = {
-              'Contratado': 6,
-              'Planta_Permanente': 7
-          };
-
-          const horasARestar = HORAS_POR_CONDICION[condicionLaboral] || 0;
-          const nuevasHorasExtra = Math.max(0, horasExtraActuales - horasARestar);
-
-          // Actualizar HorasTrabajadas eliminando la penalización
-          await pool.request()
-              .input('operadorId', sql.VarChar, operadorId)
-              .input('horasExtra', sql.Int, nuevasHorasExtra)
-              .query(`
-                  UPDATE HorasTrabajadas 
-                  SET horasExtra = @horasExtra 
-                  WHERE operadorId = @operadorId
-              `);
-
-          console.log(`Horas extra ajustadas a ${nuevasHorasExtra} para operador ${operadorId}`);
-      }
-
-      res.status(200).json({ mensaje: 'Ausencia actualizada y penalización de horas extra corregida' });
-
+    res.status(200).json({ mensaje: 'Ausencia actualizada y penalización de horas extra corregida' });
   } catch (error) {
-      console.error('Error al justificar ausencia:', error);
-      res.status(500).json({ error: 'Error interno del servidor' });
+    console.error('Error al justificar ausencia:', error);
+    res.status(500).json({ error: 'Error interno del servidor', mensaje: error.message });
   }
 }
+
 
 async listarAusencias(req, res) {
   try {

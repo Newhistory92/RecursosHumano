@@ -4,6 +4,7 @@ const licenciasController = require('../controllers/licenciasController');
 // console.log("licenciasController:", licenciasController);
 // Rutas para consulta de licencias
 router.get('/resumen/:operadorId', licenciasController.getResumenLicencias);
+router.post('/agendar/:operadorId', licenciasController.agendarLicencia);
 // router.get('/historial/:operadorId', licenciasController.getHistorialLicencias);
 
 // Ruta para forzar actualización manual (solo para pruebas/admin)

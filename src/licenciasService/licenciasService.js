@@ -6,41 +6,59 @@ const configService = require('../config/serverLicencia');
 const dataService = require('./dataService');
 
 class LicenciasService {
-  async actualizarUsoLicencias(operadorId, tipo, anio) {
+  async actualizarUsoLicencias(operadorId, tipo, anio, cantidadPost) {
     const pool = await getConnection();
     
     try {
-      // 1. Obtener el total de días usados de la tabla Licencias
-      const totalResult = await pool.request()
-        .input('operadorId', sql.VarChar, operadorId)
-        .input('tipo', sql.VarChar(50), tipo)
-        .input('anio', sql.Int, anio)
-        .query(QUERIES.getTotalUsado);
-
-      const totalUsado = totalResult.recordset[0].totalUsado || 0;
-
-      // 2. Actualizar la tabla UsoLicencias con el total calculado
-      await pool.request()
-        .input('operadorId', sql.VarChar, operadorId)
-        .input('tipo', sql.VarChar(50), tipo)
-        .input('anio', sql.Int, anio)
-        .input('totalUsado', sql.Int, totalUsado)
-        .query(QUERIES.mergeUsoLicencias);
-
-      // 3. Invalidar caché para reflejar los cambios
+      // Consultar si ya existe un registro en UsoLicencias para este operador, tipo y anio
+      const existingResult = await pool.request()
+      .input('operadorId', sql.VarChar, operadorId)
+      .input('tipo', sql.VarChar(50), tipo)
+      .input('anio', sql.Int, anio)
+      .query(QUERIES.getUsoLicencias);
+  
+      let newTotal;
+      if (existingResult.recordset.length > 0) {
+        // Existe: sumar la cantidad del POST al valor actual
+        const existingTotal = existingResult.recordset[0].totalUsado || 0;
+        newTotal = existingTotal + cantidadPost;
+        console.log(`Registro encontrado en UsoLicencias. Valor actual: ${existingTotal}. Sumando cantidad ${cantidadPost} para obtener: ${newTotal}`);
+        
+        // Actualizar el registro con el nuevo total
+        await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .input('tipo', sql.VarChar(50), tipo)
+          .input('anio', sql.Int, anio)
+          .input('totalUsado', sql.Int, newTotal)
+          .query(QUERIES.updateTotalUsado);
+          console.log("UPDATE realizado en UsoLicencias");
+      } else {
+        // No existe: insertar un nuevo registro con totalUsado = cantidadPost
+        newTotal = cantidadPost;
+        console.log(`No se encontró registro en UsoLicencias para operadorId ${operadorId}, tipo ${tipo}, anio ${anio}. Insertando nuevo registro con totalUsado = ${newTotal}`);
+        
+        await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .input('tipo', sql.VarChar(50), tipo)
+          .input('anio', sql.Int, anio)
+          .input('totalUsado', sql.Int, newTotal)
+          .query(QUERIES.insertTotalUsado);
+          console.log("INSERT realizado en UsoLicencias");
+      }
+      
+      // Invalidar caché
       dataService.invalidateOperadorCache(operadorId);
-
+      
       return { 
         success: true,
-        totalUsado,
-        mensaje: `Total de días usados actualizado para ${tipo}: ${totalUsado}`
+        totalUsado: newTotal,
+        mensaje: `Total de días usados actualizado para ${tipo}: ${newTotal}`
       };
     } catch (error) {
       console.error('Error actualizando uso de licencias:', error);
       throw error;
     }
   }
-
   static async calcularDiasDisponibles(operadorId, tipo, anio) {
     try {
       const personalData = await dataService.loadPersonalData(operadorId);
@@ -94,6 +112,31 @@ class LicenciasService {
     }
   }
 
+  async agendarLicencia(operadorId, tipo, fechaInicio, fechaFin, anio, cantidad) {
+    const pool = await getConnection();
+    try {
+      // Se inserta la licencia usando la query parametrizada de QUERIES.insertLicencia
+      await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+        .input('fechaInicio', sql.Date, fechaInicio)
+        .input('fechaFin', sql.Date, fechaFin)
+        .input('cantidad', sql.Int, cantidad)
+        .input('tipo', sql.VarChar, tipo)
+        .input('anio', sql.Int, anio)
+        .input('estado', sql.VarChar, 'Aprobado')
+        .input('updatedAt', sql.DateTime, new Date())
+        .query(QUERIES.insertLicencia);
+      
+      // Luego, se actualiza UsoLicencias: se suma la cantidad insertada.
+      await this.actualizarUsoLicencias(operadorId, tipo, anio, cantidad);
+      
+      return { success: true, mensaje: 'Licencia agendada correctamente' };
+    } catch (error) {
+      console.error('Error al agendar licencia:', error);
+      throw error;
+    }
+  }
+  
   async getResumenLicencias(operadorId) {
     const hoy = new Date();
     const currentYear = hoy.getFullYear();
