@@ -110,6 +110,78 @@ class HorasService {
     return entrada.diff(configurada, 'minutes');
   }
   
+  
+  async justificarAusencia(ausenciaId, justificado, condicionLaboral, fechaJustificada, operadorId) {
+    try {
+      // Validaciones iniciales
+      if (!ausenciaId || typeof justificado !== 'boolean' || !condicionLaboral || !operadorId) {
+        return { error: 'Faltan parámetros: ausenciaId, justificado, condicionLaboral y operadorId son requeridos', status: 400 };
+      }
+  
+      console.log(`📌 Actualizando ausencia ${ausenciaId} a justificado = ${justificado}`);
+  
+      const pool = await getConnection();
+  
+      // ✅ Actualizar la ausencia en la base de datos
+      await pool.request()
+        .input('ausenciaId', sql.Int, ausenciaId)
+        .input('justificado', sql.Bit, justificado)
+        .query(`
+          UPDATE HistorialAusencias
+          SET justificado = @justificado
+          WHERE id = @ausenciaId
+        `);
+  
+      console.log(`✅ Ausencia ${ausenciaId} actualizada en HistorialAusencias`);
+  
+      // Si la ausencia se marcó como justificada, ajustar las horas extra
+      if (justificado) {
+        console.log(`📌 Ajustando horas extra para operador ${operadorId}`);
+  
+        // 🔹 Obtener las horas extra actuales del operador
+        const resHoras = await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .query(`
+            SELECT horasExtra 
+            FROM HorasTrabajadas 
+            WHERE operadorId = @operadorId
+          `);
+  
+        let horasExtraActuales = resHoras.recordset[0] ? (resHoras.recordset[0].horasExtra || 0) : 0;
+        console.log(`⏳ Horas extra actuales: ${horasExtraActuales}`);
+  
+        // 🔹 Definir la penalización según la condición laboral
+        const HORAS_POR_CONDICION = {
+          'Contratado': 6,
+          'Planta_Permanente': 7
+        };
+        const penalizacion = HORAS_POR_CONDICION[condicionLaboral] || 8;
+        console.log(`💼 Penalización de ${penalizacion} horas`);
+  
+        // 🔹 Calcular las nuevas horas extra
+        const nuevasHorasExtra = horasExtraActuales - penalizacion;
+        console.log(`🕒 Nuevas horasExtra: ${nuevasHorasExtra}`);
+  
+        // 🔹 Actualizar la tabla HorasTrabajadas con el nuevo valor de horasExtra
+        await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .input('horasExtra', sql.Float, nuevasHorasExtra)
+          .query(`
+            UPDATE HorasTrabajadas 
+            SET horasExtra = @horasExtra, updatedAt = GETDATE()
+            WHERE operadorId = @operadorId
+          `);
+  
+        console.log(`✅ Horas extra actualizadas para operador ${operadorId}`);
+      }
+  
+      return { success: true, message: "Ausencia justificada correctamente" };
+    } catch (error) {
+      console.error('❌ Error al justificar ausencia:', error);
+      return { error: "Error interno del servidor", status: 500 };
+    }
+  }
+  
 
 }
 

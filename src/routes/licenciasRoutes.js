@@ -5,10 +5,12 @@ const licenciasController = require('../controllers/licenciasController');
 // Rutas para consulta de licencias
 router.get('/resumen/:operadorId', licenciasController.getResumenLicencias);
 router.post('/agendar/:operadorId', licenciasController.agendarLicencia);
+router.put('/actualizar/:operadorId', licenciasController.actualizarLicencia);
+router.delete('/eliminar/:operadorId/:licenciaId/:oldCantidad/:usoId', licenciasController.eliminarLicencia);
 // router.get('/historial/:operadorId', licenciasController.getHistorialLicencias);
 
 // Ruta para forzar actualización manual (solo para pruebas/admin)
-router.post('/actualizar', async (req, res) => {
+router.post('/actualizarAutomatica', async (req, res) => {
   try {
     await licenciasController.actualizacionAutomatica();
     res.json({ message: 'Actualización completada' });

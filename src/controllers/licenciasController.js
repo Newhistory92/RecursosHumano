@@ -24,10 +24,43 @@ const licenciasController = {
       console.error('Error agendando licencia:', error);
       res.status(500).json({ error: error.message });
     }
-  }
+  },
 
 
+  async actualizarLicencia(req, res) {
+    try {
+      console.log("Cuerpo recibido en el controlador:", req.body); // <-- Verifica el payload
   
+      const { operadorId } = req.params;
+      const { payload } = req.body;
+      const { id, fechaInicio, fechaFin, cantidad, tipo, usoId, oldanio, oldCantidad, oldTipo } = payload || {};
+      
+  
+      console.log("Datos extraídos:", { id, fechaInicio, fechaFin, cantidad, tipo, usoId, oldanio, oldCantidad, oldTipo });
+  
+      const licencia = await licenciasService.actualizarLicencia(
+        operadorId, id, fechaInicio, fechaFin, cantidad, tipo, usoId, oldanio, oldCantidad, oldTipo
+      );
+  
+      res.json(licencia);
+    } catch (error) {
+      console.error('Error agendando licencia:', error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+  
+
+  async eliminarLicencia(req, res) {
+    try {
+      const { operadorId, licenciaId, oldCantidad, usoId } = req.params;
+      
+      const licencia = await licenciasService.eliminarLicencia( operadorId, licenciaId, oldCantidad, usoId);
+      res.json(licencia);
+    } catch (error) {
+      console.error('Error agendando licencia:', error);
+      res.status(500).json({ error: error.message });
+    }
+  },
 
 };
 

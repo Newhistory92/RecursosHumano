@@ -4,7 +4,7 @@ const sincronizacionService = require('../services/sincronizacionService');
 const schedule = require('node-schedule');
 const { validarOperadorId } = require('../utils/validaciones');
 const reiniciarHorasExtraComisionado = require('../services/reiniciohoraExtra');
-
+const horasService = require('../services/horasService');
 class HorasController {
   constructor() {
     // Bind de los métodos
@@ -177,86 +177,12 @@ async justificarAusencia(req, res) {
     const { ausenciaId } = req.params;
     const { justificado, condicionLaboral, fechaJustificada, operadorId } = req.body;
 
-    if (!ausenciaId || typeof justificado !== 'boolean' || !condicionLaboral || !operadorId) {
-      return res.status(400).json({ 
-        error: 'Faltan parámetros: ausenciaId, justificado, condicionLaboral y operadorId son requeridos' 
-      });
-    }
-
-    console.log(`Actualizando ausencia ${ausenciaId} a justificado = ${justificado}`);
-
-    const pool = await getConnection();
-
-    // 🔍 Verificar si la fechaJustificada existe en Licencias
-    const result = await pool.request()
-      .input('fechaJustificada', sql.Date, fechaJustificada)
-      .query(`
-        SELECT COUNT(*) as existe 
-        FROM Licencias 
-        WHERE fecha = @fechaJustificada 
-        AND estado = 'Aprobado'
-      `);
-
-    if (result.recordset[0].existe === 0) {
-      return res.status(400).json({ error: 'La fecha no existe en Licencias' });
-    }
-
-    // ✅ Si existe la fecha en Licencias, actualizar la ausencia
-    await pool.request()
-      .input('ausenciaId', sql.Int, ausenciaId)
-      .input('justificado', sql.Bit, justificado)
-      .query(`
-        UPDATE HistorialAusencias
-        SET justificado = @justificado
-        WHERE id = @ausenciaId
-      `);
-
-    console.log(`Ausencia ${ausenciaId} actualizada, justificado: ${justificado}`);
-
-    // Si se marca como justificado, se procede a ajustar las horas extra
-    if (justificado) {
-      console.log(`Operador asociado a ausencia ${ausenciaId}: ${operadorId}`);
-
-      // Obtener las horasExtra actuales del operador
-      const resHoras = await pool.request()
-        .input('operadorId', sql.VarChar, operadorId)
-        .query(`
-          SELECT horasExtra 
-          FROM HorasTrabajadas 
-          WHERE operadorId = @operadorId
-        `);
-
-      let horasExtraActuales = resHoras.recordset[0] ? (resHoras.recordset[0].horasExtra || 0) : 0;
-      console.log(`Horas extra actuales para operador ${operadorId}: ${horasExtraActuales}`);
-
-      // Definir la penalización según la condición laboral
-      const HORAS_POR_CONDICION = {
-        'Contratado': 6,
-        'Planta_Permanente': 7
-      };
-      const penalizacion = HORAS_POR_CONDICION[condicionLaboral] || 8;
-      console.log(`Aplicando penalización de ${penalizacion} horas para condición ${condicionLaboral}`);
-
-      // Calcular las nuevas horasExtra permitiendo que sean negativas
-      const nuevasHorasExtra = horasExtraActuales - penalizacion;
-      console.log(`Nuevas horasExtra para operador ${operadorId}: ${nuevasHorasExtra}`);
-
-      // Actualizar la tabla HorasTrabajadas con el nuevo valor de horasExtra
-      await pool.request()
-        .input('operadorId', sql.VarChar, operadorId)
-        .input('horasExtra', sql.Float, nuevasHorasExtra)
-        .query(`
-          UPDATE HorasTrabajadas 
-          SET horasExtra = @horasExtra, updatedAt = GETDATE()
-          WHERE operadorId = @operadorId
-        `);
-
-      console.log(`Horas extra actualizadas para operador ${operadorId}`);
-    }
-
+  
+       await horasService.justificarAusencia(ausenciaId, justificado, condicionLaboral, fechaJustificada, operadorId);
+   
     res.status(200).json({ mensaje: 'Ausencia actualizada y penalización de horas extra corregida' });
   } catch (error) {
-    console.error('Error al justificar ausencia:', error);
+    console.error('Error agendando licencia:', error);
     res.status(500).json({ error: 'Error interno del servidor', mensaje: error.message });
   }
 }

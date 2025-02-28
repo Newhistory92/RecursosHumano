@@ -49,6 +49,23 @@ VALUES (
   @operadorId, @fechaInicio, @fechaFin, @cantidad, @tipo, 'Aprobado', @anio, GETDATE()
 )`,
 
+updateLicencia: `
+        UPDATE Licencias
+        SET 
+          fechaInicio = @fechaInicio,
+          fechaFin = @fechaFin,
+          cantidad = @cantidad,
+          tipo = @tipo,
+          updatedAt = @updatedAt
+        OUTPUT 
+          INSERTED.id,
+          INSERTED.operadorId,
+          INSERTED.fechaInicio,
+          INSERTED.fechaFin,
+          INSERTED.cantidad,
+          INSERTED.tipo
+        WHERE id = @id AND operadorId = @operadorId
+      `,
 //
   getHistorialLicencias: `
     SELECT 
