@@ -12,7 +12,6 @@ class HorasController {
     this.sincronizarHoras = this.sincronizarHoras.bind(this);
     this.agregarAusencia = this.agregarAusencia.bind(this);
     this.eliminarAusencia = this.eliminarAusencia.bind(this);
-    this.justificarAusencia = this.justificarAusencia.bind(this);
     this.listarAusencias = this.listarAusencias.bind(this);
     this.getRegistroHorasDiarias = this.getRegistroHorasDiarias.bind(this);
 

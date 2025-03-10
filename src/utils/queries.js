@@ -1,9 +1,9 @@
 const QUERIES = {
   getPersonalInfo: `
-    SELECT p.*, c.*
-    FROM Personal p
-    LEFT JOIN ConfigPersonal c ON p.condicionLaboral = c.condicionLaboral
-    WHERE p.operadorId = @operadorId
+SELECT p.fechaInicioPlanta, p.condicionLaboral, p.fechaInicioTrabj
+FROM Personal p
+WHERE p.operadorId = @operadorId
+
   `,
 
   getOperadorById: `

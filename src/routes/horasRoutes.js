@@ -9,7 +9,6 @@ const horasController = new HorasController();
 router.get('/resumen/:operadorId', horasController.obtenerResumenHoras);
 router.post('/ausencias', horasController.agregarAusencia);
 router.delete('/ausencias/:ausenciaId', horasController.eliminarAusencia);
-router.put('/ausencias/:ausenciaId/justificar', horasController.justificarAusencia);
 router.get('/listar-ausencias/:operadorId', horasController.listarAusencias);
 router.get('/registro-horas/:operadorId', horasController.getRegistroHorasDiarias);
 

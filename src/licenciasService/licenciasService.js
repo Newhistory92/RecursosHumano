@@ -59,6 +59,8 @@ class LicenciasService {
       throw error;
     }
   }
+
+  
   static async calcularDiasDisponibles(operadorId, tipo, anio) {
     try {
       const personalData = await dataService.loadPersonalData(operadorId);
@@ -148,7 +150,7 @@ class LicenciasService {
         // 🔹 Obtener la condición laboral del operador desde la tabla Personal
         const resultadoCondicion = await pool.request()
           .input('operadorId', sql.VarChar, operadorId)
-          .query(`SELECT condicionLaboral FROM Personal WHERE id = @operadorId`);
+          .query(`SELECT condicionLaboral FROM Personal WHERE operadorId = @operadorId`);
   
         if (resultadoCondicion.recordset.length === 0) {
           throw new Error('No se encontró la condición laboral del operador.');

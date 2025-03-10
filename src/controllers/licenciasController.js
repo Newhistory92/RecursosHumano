@@ -1,5 +1,5 @@
 const licenciasService = require('../licenciasService/licenciasService');
-
+const ActualizacionService = require('../automatizacion/licenciasAuto');
 
 const licenciasController = {
   async getResumenLicencias(req, res) {
@@ -62,7 +62,11 @@ const licenciasController = {
     }
   },
 
+
+  
+  
 };
 
-
+ActualizacionService.iniciarActualizacionDiaria();
+ActualizacionService.iniciarActualizacionAutomatica()
 module.exports = licenciasController;
