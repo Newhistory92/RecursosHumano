@@ -61,59 +61,7 @@ class LicenciasService {
   }
 
   
-  static async calcularDiasDisponibles(operadorId, tipo, anio) {
-    try {
-      const personalData = await dataService.loadPersonalData(operadorId);
-      const licenciasData = await dataService.loadLicenciasData(operadorId, tipo, anio);
-      const totalUsado = licenciasData.totalUsado || 0;
-         
-      if (tipo === 'Profilactica') {
-        if (personalData.condicionLaboral !== 'Medico') {
-          return {
-            usado: 0,
-            total: 0,
-            disponible: 0,
-            error: 'Solo el personal médico puede usar licencias profilácticas'
-          };
-        }
-        return {
-          usado: totalUsado,
-          total: DIAS_POR_TIPO.Profilactica.dias,
-          disponible: Math.max(0, DIAS_POR_TIPO.Profilactica.dias - totalUsado)
-        };
-      }
-
-      // Si es Parte_Medico, retorna sin límite
-      if (tipo === 'Parte_Medico') {
-        return { usado: totalUsado, total: null, disponible: null };
-      }
-
-      let diasTotales;
-
-      // Si es Licencia, el cálculo depende de la condición laboral
-      if (tipo === 'Licencia') {
-        diasTotales = await configService.calcularDiasSegunAntiguedad(
-          personalData.fechaInicioPlanta,
-          personalData.condicionLaboral,
-          personalData.fechaInicioTrabj,
-          operadorId
-        );
-      } else {
-        // Para otros tipos, usar DIAS_POR_TIPO
-        diasTotales = DIAS_POR_TIPO[tipo] || 0;
-      }
-
-      return {
-        usado: totalUsado,
-        total: diasTotales,
-        disponible: Math.max(0, diasTotales - totalUsado)
-      };
-    } catch (error) {
-      console.error('Error calculando días disponibles:', error);
-      throw error;
-    }
-  }
-
+  
   async agendarLicencia(operadorId, tipo, fechaInicio, fechaFin, anio, cantidad) {
     const pool = await getConnection();
     try {
@@ -142,20 +90,20 @@ class LicenciasService {
           WHERE operadorId = @operadorId 
           AND fecha BETWEEN @fechaInicio AND @fechaFin
         `);
-  
-      if (resultadoAusencias.recordset.length > 0) {
+        
+        if (resultadoAusencias.recordset.length > 0) {
         // 🔹 Extraer el ID de la ausencia
         const ausenciaId = resultadoAusencias.recordset[0].id;
-  
+        
         // 🔹 Obtener la condición laboral del operador desde la tabla Personal
         const resultadoCondicion = await pool.request()
-          .input('operadorId', sql.VarChar, operadorId)
+        .input('operadorId', sql.VarChar, operadorId)
           .query(`SELECT condicionLaboral FROM Personal WHERE operadorId = @operadorId`);
-  
+          
         if (resultadoCondicion.recordset.length === 0) {
           throw new Error('No se encontró la condición laboral del operador.');
         }
-  
+        
         const condicionLaboral = resultadoCondicion.recordset[0].condicionLaboral;
   
         // 🔹 Llamar a horasService.justificarAusencia con los parámetros correctos
@@ -163,7 +111,7 @@ class LicenciasService {
   
         console.log(`✅ Ausencia ${ausenciaId} justificada para operador ${operadorId} con condición ${condicionLaboral}`);
       }
-  
+      
       return { success: true, mensaje: 'Licencia agendada correctamente' };
     } catch (error) {
       console.error('❌ Error al agendar licencia:', error);
@@ -186,7 +134,7 @@ class LicenciasService {
     console.log("Iniciando actualización de licencia...");
     const pool = await getConnection();
     const currentDate = new Date();
-  
+    
     try {
       console.log("Datos recibidos:", {
         operadorId,
@@ -200,11 +148,11 @@ class LicenciasService {
         oldCantidad,
         oldTipo,
       });
-  
+      
       // Determinar si solo cambiaron las fechas (cantidad y tipo permanecen iguales)
       const soloFechasCambiadas = cantidad === oldCantidad && tipo === oldTipo;
       console.log("¿Solo cambiaron las fechas?", soloFechasCambiadas);
-  
+      
       if (!soloFechasCambiadas) {
         // Caso 1: Cambio de tipo
         if (tipo !== oldTipo) {
@@ -217,7 +165,7 @@ class LicenciasService {
               `UPDATE UsoLicencias SET totalUsado = totalUsado - @oldCantidad WHERE id = @usoId`
             );
   
-          console.log("Se restó la cantidad antigua, ahora se actualiza el nuevo tipo...");
+            console.log("Se restó la cantidad antigua, ahora se actualiza el nuevo tipo...");
           await this.actualizarUsoLicencias(operadorId, tipo, oldanio, cantidad);
         }
         // Caso 2: Cambio en la cantidad (mismo tipo)
@@ -233,9 +181,9 @@ class LicenciasService {
             );
           
 
-        }
+          }
   
-        console.log("Invalidando caché para operador", operadorId);
+          console.log("Invalidando caché para operador", operadorId);
         dataService.invalidateOperadorCache(operadorId);
       }
   
@@ -250,9 +198,9 @@ class LicenciasService {
         .input("id", sql.Int, id)
         .input("operadorId", sql.VarChar, operadorId)
         .query(QUERIES.updateLicencia);
-  
-      if (!result.recordset || result.recordset.length === 0) {
-        console.log("Licencia no encontrada.");
+        
+        if (!result.recordset || result.recordset.length === 0) {
+          console.log("Licencia no encontrada.");
         return { error: "Licencia no encontrada", status: 404 };
       }
       console.log("Licencia actualizada exitosamente.", result.recordset[0]);
@@ -265,132 +213,160 @@ class LicenciasService {
   
   async  eliminarLicencia(operadorId, licenciaId, oldCantidad, usoId) {
     console.log("Iniciando eliminación de licencia...");
-  
+    
     const pool = await getConnection();
-  
+    
     try {
       console.log("Datos recibidos:", { operadorId, licenciaId, oldCantidad, usoId });
   
       // Restar la oldCantidad en UsoLicencias antes de eliminar la licencia
       console.log("Actualizando UsoLicencias, restando la cantidad antigua...");
       await pool
-        .request()
-        .input("usoId", sql.Int, usoId)
-        .input("oldCantidad", sql.Int, oldCantidad)
-        .query(`
-          UPDATE UsoLicencias 
-          SET totalUsado = totalUsado - @oldCantidad 
-          WHERE id = @usoId
+      .request()
+      .input("usoId", sql.Int, usoId)
+      .input("oldCantidad", sql.Int, oldCantidad)
+      .query(`
+        UPDATE UsoLicencias 
+        SET totalUsado = totalUsado - @oldCantidad 
+        WHERE id = @usoId
         `);
-  
-      console.log("Eliminando la licencia...");
-      await pool
+        
+        console.log("Eliminando la licencia...");
+        await pool
         .request()
         .input("licenciaId", sql.Int, licenciaId)
         .input("operadorId", sql.VarChar, operadorId)
         .query(`
           DELETE FROM Licencias 
           WHERE id = @licenciaId AND operadorId = @operadorId
-        `);
+          `);
   
-      console.log("Licencia eliminada exitosamente.");
-      return { success: true };
-  
+          console.log("Licencia eliminada exitosamente.");
+          return { success: true };
+          
     } catch (error) {
       console.error("Error al eliminar licencia:", error);
       return { error: "Error al eliminar la licencia", status: 500 };
     }
   }
   
+
   
+
+
   async getResumenLicencias(operadorId) {
     const hoy = new Date();
     const currentYear = hoy.getFullYear();
     const activeYearLicencia = hoy.getMonth() < 9 ? currentYear - 1 : currentYear;
   
     try {
-      const personalData = await dataService.loadPersonalData(operadorId);
-      let diasLicencia;
-  
-      // Determinar días de licencia según condición laboral
-      if (personalData.condicionLaboral === 'Contratado') {
-        diasLicencia = DIAS_POR_TIPO.Licencia.Contratado;
-      } else {
-        diasLicencia = await configService.calcularDiasSegunAntiguedad(
-          personalData.fechaInicioPlanta,
-          personalData.condicionLaboral,
-          personalData.fechaInicioTrabj,
-          operadorId
+      const historialData = await dataService.loadHistorialLicencias(operadorId, currentYear);
+      //console.log('Datos recibidos de loadHistorialLicencias:', historialData);
+      const personalData = historialData.length > 0 ? historialData[0].personal : {}
+      const diasLicencia = personalData.diasLicenciaAsignados || 0;
+      const condicionLaboral = personalData.condicionLaboral || '';
+      const sexo = historialData.length > 0 ? historialData[0].operador.sexo : '';
+      const licenciasData =  historialData.length > 0 ? historialData[0].usoLicencia: {}
+      const fechaIngreso = personalData.fechaInicioPlanta;
+
+        // 2. Filtrar tipos de licencia según el sexo
+    const getTiposLicenciaPermitidos = (sexo) => {
+      let tipos = [...TIPOS_LICENCIA]; // Clonar el arreglo original de tipos de licencia
+      const sexoNormalized = sexo ? sexo.trim().toLowerCase() : "";
+      if (sexoNormalized === 'masculino') {
+        tipos = tipos.filter(tipo => tipo !== 'Maternidad');
+      } else if (sexoNormalized === 'femenino') {
+        tipos = tipos.filter(tipo => tipo !== 'Paternidad');
+      }
+      return tipos;
+    };
+    const tiposLicencia = getTiposLicenciaPermitidos(sexo);
+
+    // 3. Para cada tipo, obtener el uso anual y el historial
+    const resumen = await Promise.all(
+      tiposLicencia.map(async (tipo) => {
+        const años = tipo === 'Licencia'
+          ? [activeYearLicencia, activeYearLicencia - 1, activeYearLicencia - 2]
+          : [currentYear];
+
+        // const usoAnual = await Promise.all(
+        //   años.map(async (anio) => {
+        //     // Se llama a calcularDiasDisponibles con datos de licenciasData
+        //     const { usado, total, disponible } = await LicenciasService.calcularDiasDisponibles(
+        //       licenciasData.totalUsado, licenciasData.tipo, licenciasData.anio, diasLicencia, condicionLaboral
+        //     );
+        //     return {
+        //       anio,
+        //       usado,
+        //       disponible,
+        //       total,
+        //       displayFormat: total === null ? `${usado}` : `${usado}/${total}`,
+        //       resumen: total === null ? `${usado}` : `${usado}/${total}`
+        //     };
+        //   })
+        // );
+ const usoAnual = await Promise.all(
+          años.map(async (anio) => {
+            // Buscar uso de licencia en el historial
+            const registroUso = historialData.find(r =>
+              r.usoLicencia && r.usoLicencia.tipo === tipo && r.usoLicencia.anio === anio
+            );
+            const usado = registroUso ? registroUso.usoLicencia.totalUsado : 0;
+
+            // Calcular total basado en condiciones
+            let total;
+            if (tipo === 'Licencia') {
+              total = diasLicencia;
+            } else if (tipo === 'Parte_Medico') {
+              total = null; // Sin límite
+            } else if (tipo === 'Profilactica') {
+              total = (condicionLaboral === 'Medico' || condicionLaboral === 'Comisionado') ? DIAS_POR_TIPO[tipo] || 0 : 0;
+            } else {
+              total = DIAS_POR_TIPO[tipo] || 0;
+            }
+
+            // Calcular disponible
+            const disponible = total !== null ? Math.max(0, total - usado) : null;
+
+            console.log(`Tipo: ${tipo}, Año: ${anio}, Usado: ${usado}, Total: ${total}, Disponible: ${disponible}`);
+            return {
+              anio,
+              usado,
+              disponible,
+              total,
+              displayFormat: total === null ? `${usado}` : `${usado}/${total}`,
+              resumen: total === null ? `${usado}` : `${usado}/${total}`
+            };
+          })
         );
-      }
-  
-      // Obtener información del operador
-      const pool = await getConnection();
-      const operadorResult = await pool.request()
-        .input('operadorId', sql.VarChar, operadorId)
-        .query(QUERIES.getOperadorById);
-  
-      if (!operadorResult.recordset[0]) {
-        throw new Error('Operador no encontrado');
-      }
-      const { sexo } = operadorResult.recordset[0];
-  
-      // Filtrar tipos de licencia según el sexo
-      const getTiposLicenciaPermitidos = (sexo) => {
-        let tipos = [...TIPOS_LICENCIA]; // Clonar el arreglo original
-        const sexoNormalized = sexo ? sexo.trim().toLowerCase() : "";
-  
-        if (sexoNormalized === 'masculino') {
-          tipos = tipos.filter(tipo => tipo !== 'Maternidad');
-        } else if (sexoNormalized === 'femenino') {
-          tipos = tipos.filter(tipo => tipo !== 'Paternidad');
-        }
-        return tipos;
-      };
-  
-      const tiposLicencia = getTiposLicenciaPermitidos(sexo);
-  
-      const resumen = await Promise.all(
-        tiposLicencia.map(async (tipo) => {
-          const años = tipo === 'Licencia' ? 
-            [activeYearLicencia, activeYearLicencia - 1, activeYearLicencia - 2] :
-            [currentYear];
-  
-          const usoAnual = await Promise.all(
-            años.map(async (anio) => {
-              const { usado, total, disponible } = await LicenciasService.calcularDiasDisponibles(operadorId, tipo, anio);
-              return {
-                anio,
-                usado,
-                disponible,
-                total,
-                displayFormat: total === null ? `${usado}` : `${usado}/${total}`,
-                resumen: total === null ? `${usado}` : `${usado}/${total}`
-              };
-            })
-          );
-  
-          // Obtener historial detallado
-          const historial = await dataService.loadHistorialLicencias(operadorId, tipo, currentYear);
-  
-          return {
-            tipo,
-            usoAnual,
-            historial: historial.map(lic => ({
-              ...lic,
-              fechaInicio: lic.fechaInicio ? new Date(lic.fechaInicio).toISOString().split('T')[0] : null,
-              fechaFin: lic.fechaFin ? new Date(lic.fechaFin).toISOString().split('T')[0] : null,
-              createdAt: lic.createdAt ? new Date(lic.createdAt).toISOString() : null,
-              updatedAt: lic.updatedAt ? new Date(lic.updatedAt).toISOString() : null
-            }))
-          };
-        })
-      );
-  
+      
+        // Filtrar el historial para este tipo de licencia
+        const historialPorTipo = historialData.filter(r => r.licencia && r.licencia.tipo === tipo);
+        const historialFormateado = historialPorTipo.map(lic => ({
+          licencia: {
+            id: lic.licencia.id,
+            fechaInicio: lic.licencia.fechaInicio ? new Date(lic.licencia.fechaInicio).toISOString().split('T')[0] : null,
+            fechaFin: lic.licencia.fechaFin ? new Date(lic.licencia.fechaFin).toISOString().split('T')[0] : null,
+            cantidad: lic.licencia.cantidad,
+            tipo: lic.licencia.tipo,
+            estado: lic.licencia.estado,
+            anio: lic.licencia.anio,
+            createdAt: lic.licencia.createdAt ? new Date(lic.licencia.createdAt).toISOString() : null,
+            updatedAt: lic.licencia.updatedAt ? new Date(lic.licencia.updatedAt).toISOString() : null
+          }
+        }));
+
+        return {
+          tipo,
+          usoAnual,
+          historial: historialFormateado
+        };
+      })
+    );
       return {
         resumen,
-        condicionLaboral: personalData.condicionLaboral,
-        fechaIngreso: personalData.fechaInicioPlanta,
+        condicionLaboral,
+        fechaIngreso,
         diasLicenciaAnuales: diasLicencia
       };
     } catch (error) {

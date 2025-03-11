@@ -1,6 +1,6 @@
 const QUERIES = {
   getPersonalInfo: `
-SELECT p.fechaInicioPlanta, p.condicionLaboral, p.fechaInicioTrabj
+SELECT p.fechaInicioPlanta, p.condicionLaboral, p.fechaInicioTrabj,p.id
 FROM Personal p
 WHERE p.operadorId = @operadorId
 
@@ -13,11 +13,7 @@ WHERE id = @operadorId
 
   `,
 
-  getConfigPersonal: `
-    SELECT *
-    FROM ConfigPersonal
-    WHERE condicionLaboral = @condicionLaboral
-  `,
+ 
 
   getOperadores: `
     SELECT DISTINCT o.id
@@ -68,21 +64,53 @@ updateLicencia: `
       `,
 //
   getHistorialLicencias: `
-    SELECT 
-      id,
-      fechaInicio,
-      fechaFin,
-      cantidad,
-      estado,
-      anio,
-      createdAt,
-      updatedAt
-    FROM Licencias
-    WHERE operadorId = @operadorId
-      AND tipo = @tipo
-      AND anio >= @anioActual - 2
-    ORDER BY fechaInicio DESC
-  `,
+      WITH UsoLicenciasOrdered AS ( 
+  SELECT 
+    u.*,
+    ROW_NUMBER() OVER (
+      PARTITION BY u.operadorId, u.anio, u.tipo 
+      ORDER BY u.createdAt DESC
+    ) AS rn
+  FROM UsoLicencias u
+)
+SELECT 
+  l.id AS licenciaId,
+  l.fechaInicio,
+  l.fechaFin,
+  l.tipo,
+  l.cantidad,
+  l.estado,
+  l.anio,
+  l.createdAt AS licenciaCreatedAt,
+  l.updatedAt AS licenciaUpdatedAt,
+  o.sexo,
+  uo.id AS usoLicenciaId,
+  uo.totalUsado,
+  uo.tipo AS usoLicenciaTipo,
+  uo.anio AS usoLicenciaAnio,
+  uo.updatedAt AS usoLicenciaUpdatedAt,
+  uo.createdAt AS usoLicenciaCreatedAt,
+  la.diasLicenciaAsignados, -- Se obtiene de LicenciaporAnios
+  la.anio AS licenciaAnioAsignado, -- Asegura que se ve el año correcto
+  p.condicionLaboral,
+  p.fechaInicioPlanta
+FROM Licencias l
+JOIN Operador o ON l.operadorId = o.id
+JOIN Personal p ON l.operadorId = p.operadorId
+LEFT JOIN UsoLicenciasOrdered uo 
+  ON l.operadorId = uo.operadorId 
+  AND l.anio = uo.anio 
+  AND l.tipo = uo.tipo
+  AND uo.rn = 1
+LEFT JOIN LicenciaporAnios la
+  ON p.id = la.personalId
+  AND l.anio = la.anio
+WHERE l.operadorId = @operadorId
+  AND l.anio >= @anioActual - 2
+ORDER BY l.fechaInicio DESC;
+
+
+        `,
 
 
   updateDiasAsignados: `

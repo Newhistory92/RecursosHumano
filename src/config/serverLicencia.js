@@ -5,12 +5,12 @@ const { DIAS_POR_TIPO } = require('../utils/type');
 
 class ConfigService {
   
-  async calcularDiasSegunAntiguedad(fechaInicioPlanta, condicionLaboral, fechaInicioTrabj, operadorId) {
+  async calcularDiasSegunAntiguedad(fechaInicioPlanta, condicionLaboral, fechaInicioTrabj,id) {
     console.log('Iniciando cálculo con:', {
       condicionLaboral,
-      operadorId,
       fechaInicioPlanta,
-      fechaInicioTrabj
+      fechaInicioTrabj,
+      id
     });
   
     // Normalizar condicionLaboral (si viene como array, tomar el primer elemento)
@@ -20,14 +20,14 @@ class ConfigService {
     // Si la fechaInicioPlanta es null o es la fecha "1900-01-01T00:00:00.000Z", no se puede calcular
     if (!fechaInicioPlanta || new Date(fechaInicioPlanta).toISOString() === "1900-01-01T00:00:00.000Z") {
       console.log('FechaInicioPlanta no válida (null o 1900-01-01), asignando 0 días');
-      return await this.actualizarDiasLicencia(operadorId, 0);
+      return await this.actualizarDiasLicencia( 0,id);
     }
   
     // Para contratados, se usa fechaInicioTrabj
     if (tipoContrato === 'Contratado') {
       if (!fechaInicioTrabj) {
         console.log('No se proporcionó fechaInicioTrabj, asignando 10 días fijos');
-        return await this.actualizarDiasLicencia(operadorId, 10);
+        return await this.actualizarDiasLicencia( 10,id);
       }
       const hoy = new Date();
       const inicio = new Date(fechaInicioTrabj);
@@ -37,10 +37,10 @@ class ConfigService {
       if (mesesTrabajados < 12) {
         const diasCalculados = Math.floor((DIAS_POR_TIPO.Licencia.Contratado * mesesTrabajados) / 12);
         console.log('Días calculados proporcionalmente:', diasCalculados);
-        return await this.actualizarDiasLicencia(operadorId, diasCalculados);
+        return await this.actualizarDiasLicencia( diasCalculados,id);
       }
       console.log('Tiene 12 o más meses, asignando días según configuración');
-      return await this.actualizarDiasLicencia(operadorId, DIAS_POR_TIPO.Licencia.Contratado);
+      return await this.actualizarDiasLicencia( DIAS_POR_TIPO.Licencia.Contratado,id);
     }
   
     // Para otros casos, se utiliza fechaInicioPlanta
@@ -63,7 +63,7 @@ class ConfigService {
     }
   
     console.log('Días asignados según antigüedad:', diasCalculados);
-    return await this.actualizarDiasLicencia(operadorId, diasCalculados);
+    return await this.actualizarDiasLicencia( diasCalculados,id);
   }
 
   calcularMesesTrabajados(fechaInicio, fechaFin) {
@@ -142,26 +142,60 @@ class ConfigService {
   //   }
   // }
 
-  async actualizarDiasLicencia(operadorId, dias) {
+  async actualizarDiasLicencia(dias, id) {
+    const anioActual = new Date().getFullYear(); // Obtener el año actual
     console.log('Actualizando días de licencia:', {
-      operadorId,
-      diasAAsignar: dias
+      idPersonal: id,
+      diasAAsignar: dias,
+      anio: anioActual
     });
-
+  
     try {
       const pool = await getConnection();
-      await pool.request()
-        .input('operadorId', sql.VarChar, operadorId)
-        .input('diasLicenciaAsignados', sql.Int, dias)
-        .query(QUERIES.updateDiasAsignados);
-      
-      console.log('Días actualizados exitosamente');
+  
+      // Verificar si ya hay un registro para este año en LicenciaporAnios
+      const result = await pool.request()
+        .input('idPersonal', sql.Int, id)
+        .input('anio', sql.Int, anioActual)
+        .query(`
+          SELECT COUNT(*) AS existe FROM LicenciaporAnios 
+          WHERE personalId = @idPersonal AND anio = @anio
+        `);
+  
+      const existe = result.recordset[0].existe > 0;
+  
+      if (existe) {
+        // Si ya existe, actualizar los días asignados
+        await pool.request()
+          .input('idPersonal', sql.Int, id)
+          .input('anio', sql.Int, anioActual)
+          .input('diasLicenciaAsignados', sql.Int, dias)
+          .query(`
+            UPDATE LicenciaporAnios 
+            SET diasLicenciaAsignados = @diasLicenciaAsignados 
+            WHERE personalId = @idPersonal AND anio = @anio
+          `);
+        console.log('Días actualizados exitosamente');
+      } else {
+        // Si no existe, insertar un nuevo registro
+        await pool.request()
+          .input('idPersonal', sql.Int, id)
+          .input('anio', sql.Int, anioActual)
+          .input('diasLicenciaAsignados', sql.Int, dias)
+          .query(`
+            INSERT INTO LicenciaporAnios (personalId, anio, diasLicenciaAsignados, createdAt, updatedAt)
+            VALUES (@idPersonal, @anio, @diasLicenciaAsignados, GETDATE(), GETDATE())
+          `);
+        console.log('Días insertados exitosamente');
+      }
+  
       return dias;
     } catch (error) {
       console.error('Error actualizando diasLicenciaAsignados:', error);
       throw error;
     }
   }
+  
 }
 
 module.exports = new ConfigService();

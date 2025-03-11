@@ -2,6 +2,7 @@ const schedule = require('node-schedule');
 const { getConnection } = require('../config/configbd');
 const { QUERIES } = require('../utils/queries');
 const ConfigService = require('../config/serverLicencia');
+const dataService = require('../licenciasService/dataService');
 const sql = require('mssql');
 
 class ActualizacionService {
@@ -16,22 +17,23 @@ class ActualizacionService {
       
       // 1. Obtener la lista de operadores que tienen registro en Personal
       const operadores = await pool.request().query(QUERIES.getOperadores);
+     
       console.log(`🔹 Operadores encontrados: ${operadores.recordset.length}`);
       
       // 2. Procesar cada operador
       for (const operador of operadores.recordset) {
         console.log(`🔹 Procesando operador: ${operador.id}`);
         
+      
         // Obtener datos del personal
-        const personalDataResult = await pool.request()
-          .input('operadorId', sql.NVarChar(1000), operador.id)
-          .query(QUERIES.getPersonalInfo);
+        const personalDataResult = await dataService.loadPersonalData(operador.id);
+        if (!personalData) {
+          console.warn(`⚠ No se encontraron datos de personal para operador ID: ${operador.id}`);
+          continue;  // Saltar al siguiente operador si no hay datos
         
-        if (personalDataResult.recordset.length > 0) {
-          const personalData = personalDataResult.recordset[0];
           // Se asume que la consulta getPersonalInfo trae al menos:
           // fechaInicioPlanta, condicionLaboral y fechaInicioTrabj
-          const { condicionLaboral, fechaInicioTrabj, fechaInicioPlanta } = personalData;
+          const { condicionLaboral, fechaInicioTrabj, fechaInicioPlanta,id } = personalData;
           console.log(`   • Datos personales: condicionLaboral: ${condicionLaboral}, fechaInicioTrabj: ${fechaInicioTrabj}, fechaInicioPlanta: ${fechaInicioPlanta}`);
           
           // 3. Calcular nuevos días de licencia para el año actual
@@ -39,24 +41,12 @@ class ActualizacionService {
             fechaInicioPlanta,
             condicionLaboral,
             fechaInicioTrabj,
+            id,
             operador.id
           );
           console.log(`   • Nuevos días de licencia calculados: ${nuevosDias}`);
-          
-          // 4. Actualizar la tabla Personal: asignar los nuevos días de licencia
-          console.log("   • Actualizando Personal con los nuevos días asignados...");
-          await pool.request()
-            .input('operadorId', sql.NVarChar(1000), operador.id)
-            .input('diasLicenciaAsignados', sql.Int, nuevosDias)
-            .query(`
-              UPDATE Personal
-              SET diasLicenciaAsignados = @diasLicenciaAsignados,
-                  updatedAt = GETDATE()
-              WHERE operadorId = @operadorId
-            `);
-          console.log(`   • Personal actualizado para operador ${operador.id}`);
-          
-           // 5. Insertar en UsoLicencias (solo si no existe ya para este operador, tipo 'Licencia' y el año actual)
+
+           // 4. Insertar en UsoLicencias (solo si no existe ya para este operador, tipo 'Licencia' y el año actual)
         console.log("   • Insertando registro en UsoLicencias (si no existe)...");
         await pool.request()
           .input('operadorId', sql.NVarChar(1000), operador.id)
@@ -146,21 +136,21 @@ class ActualizacionService {
   iniciarActualizacionAutomatica() {
 
     // Actualización especial el 1 de octubre
-    schedule.scheduleJob(
-      { hour: 0, minute: 0, dayOfMonth: 1, month: 10, tz: 'America/Argentina/Buenos_Aires' }, 
-      async () => {
-      console.log('Iniciando actualización de octubre');
-      try {
-        await this.actualizacionOctubre();
-      } catch (error) {
-        console.error('Error en la actualización de octubre:', error);
-      }
-    });
-    // Modo de prueba: ejecutar la actualización cada 1 minuto
-    // schedule.scheduleJob('*/1 * * * *', async () => {
-    //   console.log('Iniciando actualización cada 1 minuto de estados de licencias (modo prueba)');
-    //   await this.actualizacionOctubre();
+    // schedule.scheduleJob(
+    //   { hour: 0, minute: 0, dayOfMonth: 1, month: 10, tz: 'America/Argentina/Buenos_Aires' }, 
+    //   async () => {
+    //   console.log('Iniciando actualización de octubre');
+    //   try {
+    //     await this.actualizacionOctubre();
+    //   } catch (error) {
+    //     console.error('Error en la actualización de octubre:', error);
+    //   }
     // });
+    // Modo de prueba: ejecutar la actualización cada 1 minuto
+    schedule.scheduleJob('*/1 * * * *', async () => {
+      console.log('Iniciando actualización cada 1 minuto de estados de licencias (modo prueba)');
+      await this.actualizacionOctubre();
+    });
   }
 
   iniciarActualizacionDiaria() {
