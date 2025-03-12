@@ -79,7 +79,17 @@ class LicenciasService {
   
       // 🔹 Actualizar UsoLicencias
       await this.actualizarUsoLicencias(operadorId, tipo, anio, cantidad);
-  
+      const fechaActual = new Date().toISOString().split('T')[0];
+      const fechaInicioFormat = new Date(fechaInicio).toISOString().split('T')[0];
+      if (fechaInicioFormat === fechaActual) {
+        console.log(`🟢 La fecha de inicio (${fechaInicioFormat}) coincide con la fecha actual (${fechaActual}). Actualizando Personal...`);
+        await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .input('tipo', sql.VarChar, tipo)
+          .query(QUERIES.actualizarTipoPersonal);
+        console.log(`✅ Actualizado Personal: operador ${operadorId} ahora es de tipo ${tipo}`);
+      }
+      
       // 🔹 Buscar ausencias que coincidan con la fecha de la licencia
       const resultadoAusencias = await pool.request()
         .input('operadorId', sql.VarChar, operadorId)
@@ -257,17 +267,18 @@ class LicenciasService {
   async getResumenLicencias(operadorId) {
     const hoy = new Date();
     const currentYear = hoy.getFullYear();
-    const activeYearLicencia = hoy.getMonth() < 9 ? currentYear - 1 : currentYear;
+
   
     try {
       const historialData = await dataService.loadHistorialLicencias(operadorId, currentYear);
-      //console.log('Datos recibidos de loadHistorialLicencias:', historialData);
-      const personalData = historialData.length > 0 ? historialData[0].personal : {}
-      const diasLicencia = personalData.diasLicenciaAsignados || 0;
+     //console.log('Datos recibidos de loadHistorialLicencias:', historialData);
+      
+      const personalData = historialData.length > 0 ? historialData[0].personal : {};
+      //console.log('Datos de personal extraídos:', personalData);
+      const licenciaporAnios = personalData.licenciaporAnios;
       const condicionLaboral = personalData.condicionLaboral || '';
-      const sexo = historialData.length > 0 ? historialData[0].operador.sexo : '';
-      const licenciasData =  historialData.length > 0 ? historialData[0].usoLicencia: {}
-      const fechaIngreso = personalData.fechaInicioPlanta;
+      const sexo = historialData.length > 0 ? historialData[0].operador.sexo : '';     
+      const fechaIngreso = personalData.fechaInicioPlanta;     
 
         // 2. Filtrar tipos de licencia según el sexo
     const getTiposLicenciaPermitidos = (sexo) => {
@@ -286,49 +297,42 @@ class LicenciasService {
     const resumen = await Promise.all(
       tiposLicencia.map(async (tipo) => {
         const años = tipo === 'Licencia'
-          ? [activeYearLicencia, activeYearLicencia - 1, activeYearLicencia - 2]
-          : [currentYear];
+        ? personalData.licenciaporAnios  // Contiene objetos con { anio, diasLicenciaAsignados }
+        : [{ anio: currentYear }];
 
-        // const usoAnual = await Promise.all(
-        //   años.map(async (anio) => {
-        //     // Se llama a calcularDiasDisponibles con datos de licenciasData
-        //     const { usado, total, disponible } = await LicenciasService.calcularDiasDisponibles(
-        //       licenciasData.totalUsado, licenciasData.tipo, licenciasData.anio, diasLicencia, condicionLaboral
-        //     );
-        //     return {
-        //       anio,
-        //       usado,
-        //       disponible,
-        //       total,
-        //       displayFormat: total === null ? `${usado}` : `${usado}/${total}`,
-        //       resumen: total === null ? `${usado}` : `${usado}/${total}`
-        //     };
-        //   })
-        // );
  const usoAnual = await Promise.all(
-          años.map(async (anio) => {
-            // Buscar uso de licencia en el historial
+          años.map(async (item) => {
+            const anio = item.anio;
             const registroUso = historialData.find(r =>
-              r.usoLicencia && r.usoLicencia.tipo === tipo && r.usoLicencia.anio === anio
+              r.usoLicencia && r.usoLicencia.some(u =>
+                u.usoLicenciaTipo === tipo && u.usoLicenciaAnio === anio
+              )
             );
-            const usado = registroUso ? registroUso.usoLicencia.totalUsado : 0;
 
+            const usoRecord = registroUso 
+              ? registroUso.usoLicencia.find(u => u.usoLicenciaTipo === tipo && u.usoLicenciaAnio === anio) 
+              : null;
+
+            const usado = usoRecord ? usoRecord.totalUsado : 0;
             // Calcular total basado en condiciones
             let total;
-            if (tipo === 'Licencia') {
-              total = diasLicencia;
-            } else if (tipo === 'Parte_Medico') {
-              total = null; // Sin límite
-            } else if (tipo === 'Profilactica') {
-              total = (condicionLaboral === 'Medico' || condicionLaboral === 'Comisionado') ? DIAS_POR_TIPO[tipo] || 0 : 0;
-            } else {
-              total = DIAS_POR_TIPO[tipo] || 0;
-            }
+    if (tipo === 'Licencia') {
+      total = item.diasLicenciaAsignados;
+    } else if (tipo === 'Parte_Medico') {
+      total = null;
+    } else if (tipo === 'Profilactica') {
+      if (!(condicionLaboral === 'Medico' || condicionLaboral === 'Comisionado')) {
+        return null; // Excluir del resumen
+      }
+      total = DIAS_POR_TIPO[tipo] || 0;
+    } else {
+      total = DIAS_POR_TIPO[tipo] || 0;
+    }
 
             // Calcular disponible
             const disponible = total !== null ? Math.max(0, total - usado) : null;
 
-            console.log(`Tipo: ${tipo}, Año: ${anio}, Usado: ${usado}, Total: ${total}, Disponible: ${disponible}`);
+            //console.log(`Tipo: ${tipo}, Año: ${anio}, Usado: ${usado}, Total: ${total}, Disponible: ${disponible}`);
             return {
               anio,
               usado,
@@ -343,7 +347,6 @@ class LicenciasService {
         // Filtrar el historial para este tipo de licencia
         const historialPorTipo = historialData.filter(r => r.licencia && r.licencia.tipo === tipo);
         const historialFormateado = historialPorTipo.map(lic => ({
-          licencia: {
             id: lic.licencia.id,
             fechaInicio: lic.licencia.fechaInicio ? new Date(lic.licencia.fechaInicio).toISOString().split('T')[0] : null,
             fechaFin: lic.licencia.fechaFin ? new Date(lic.licencia.fechaFin).toISOString().split('T')[0] : null,
@@ -352,8 +355,7 @@ class LicenciasService {
             estado: lic.licencia.estado,
             anio: lic.licencia.anio,
             createdAt: lic.licencia.createdAt ? new Date(lic.licencia.createdAt).toISOString() : null,
-            updatedAt: lic.licencia.updatedAt ? new Date(lic.licencia.updatedAt).toISOString() : null
-          }
+            updatedAt: lic.licencia.updatedAt ? new Date(lic.licencia.updatedAt).toISOString() : null        
         }));
 
         return {
@@ -367,15 +369,13 @@ class LicenciasService {
         resumen,
         condicionLaboral,
         fechaIngreso,
-        diasLicenciaAnuales: diasLicencia
+        diasLicenciaAnuales: licenciaporAnios[0].diasLicenciaAsignados
       };
     } catch (error) {
       console.error('Error obteniendo resumen:', error);
       throw error;
     }
   }
-  
-  
   
   
 }

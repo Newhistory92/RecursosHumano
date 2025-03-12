@@ -45,9 +45,10 @@ class DataService {
         .input('operadorId', sql.VarChar, operadorId)
         .input('anioActual', sql.Int, anioActual)
         .query(QUERIES.getHistorialLicencias);
-
+   
+        // console.log(   result)
       historial = this.formatHistorialLicencias(result.recordset);
-console.log(historial)
+      //console.log( historial)
       cacheService.set(cacheKey, historial);
     }
 
@@ -55,36 +56,56 @@ console.log(historial)
   }
 
   formatHistorialLicencias(records) {
-    return records.map(record => ({
-      licencia: {
-        id: record.licenciaId,
-        fechaInicio: record.fechaInicio,
-        fechaFin: record.fechaFin,
-        cantidad: record.cantidad,
-        tipo: record.tipo,
-        estado: record.estado,
-        anio: record.anio,
-        createdAt: record.licenciaCreatedAt,
-        updatedAt: record.licenciaUpdatedAt
-      },
-      operador: {
-        sexo: record.sexo
-      },
-      usoLicencia: {
-        id: record.usoLicenciaId,
-        totalUsado: record.totalUsado,
-        tipo: record.tipo,
-        anio: record.anio,
-        createdAt: record.usoLicenciaCreatedAt,
-        updatedAt: record.usoLicenciaUpdatedAt
-      },
-      personal: {
-        diasLicenciaAsignados: record.diasLicenciaAsignados,
-        condicionLaboral: record.condicionLaboral,
-        fechaInicioPlanta: record.fechaInicioPlanta
+    return records.map(record => {
+      let usoLicenciaArray = [];
+      let licenciaporAniosArray = [];
+  
+      // Intentar parsear UsoLicenciasRecords
+      try {
+        if (record.UsoLicenciasRecords) {
+          usoLicenciaArray = JSON.parse(record.UsoLicenciasRecords);
+        }
+      } catch (e) {
+        console.error("Error parseando UsoLicenciasRecords:", e);
       }
-    }));
+  
+      // Intentar parsear LicenciaporAniosRecords
+      try {
+        if (record.LicenciaporAniosRecords) {
+          licenciaporAniosArray = JSON.parse(record.LicenciaporAniosRecords);
+        }
+      } catch (e) {
+        console.error("Error parseando LicenciaporAniosRecords:", e);
+      }
+  
+      return {
+        licencia: {
+          id: record.licenciaId,
+          fechaInicio: record.fechaInicio,
+          fechaFin: record.fechaFin,
+          cantidad: record.cantidad,
+          tipo: record.tipo,
+          estado: record.estado,
+          anio: record.licenciaAnio,
+          createdAt: record.licenciaCreatedAt,
+          updatedAt: record.licenciaUpdatedAt
+        },
+        operador: {
+          sexo: record.sexo
+        },
+        usoLicencia: usoLicenciaArray, // Mantenemos el array completo de uso de licencias
+        personal: {
+          licenciaporAnios: licenciaporAniosArray.map(anioRecord => ({
+            anio: anioRecord.licenciaAnioAsignado,
+            diasLicenciaAsignados: anioRecord.diasLicenciaAsignados
+          })),
+          condicionLaboral: record.condicionLaboral,
+          fechaInicioPlanta: record.fechaInicioPlanta
+        }
+      };
+    });
   }
+  
 
 
   invalidateOperadorCache(operadorId) {

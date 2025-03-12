@@ -27,13 +27,11 @@ class ActualizacionService {
       
         // Obtener datos del personal
         const personalDataResult = await dataService.loadPersonalData(operador.id);
-        if (!personalData) {
-          console.warn(`⚠ No se encontraron datos de personal para operador ID: ${operador.id}`);
-          continue;  // Saltar al siguiente operador si no hay datos
-        
+        if (personalDataResult && Object.keys(personalDataResult).length > 0) {
+          console.log("   • Datos personales encontrados:", personalDataResult);
           // Se asume que la consulta getPersonalInfo trae al menos:
           // fechaInicioPlanta, condicionLaboral y fechaInicioTrabj
-          const { condicionLaboral, fechaInicioTrabj, fechaInicioPlanta,id } = personalData;
+          const { condicionLaboral, fechaInicioTrabj, fechaInicioPlanta,id } = personalDataResult;
           console.log(`   • Datos personales: condicionLaboral: ${condicionLaboral}, fechaInicioTrabj: ${fechaInicioTrabj}, fechaInicioPlanta: ${fechaInicioPlanta}`);
           
           // 3. Calcular nuevos días de licencia para el año actual
@@ -105,17 +103,20 @@ class ActualizacionService {
           console.log(`✅ Actualizado operador ${licencia.operadorId} a tipo ${licencia.tipo}`);
         }   // Manejo especial para licencias de un solo día
         if (fechaInicio === fechaFin) {
-            console.log(`🕒 La licencia de ${licencia.operadorId} dura solo 1 día. Reactivando en 24 horas...`);
-            setTimeout(async () => {
-                try {
-                    await pool.request()
-                        .input('operadorId', sql.VarChar, licencia.operadorId)
-                        .query(QUERIES.reactivarPersonal);
-                    console.log(`✅ Reactivado operador ${licencia.operadorId} después de 24 horas`);
-                } catch (error) {
-                    console.error(`❌ Error al reactivar operador ${licencia.operadorId}:`, error);
-                }
-            }, 24 * 60 * 60 * 1000); // 24 horas en milisegundos
+          // Calcular la fecha de reactivación: fechaFin + 24 horas
+          const fechaFinObj = new Date(licencia.fechaFin);
+          const fechaFinPlus24 = new Date(fechaFinObj.getTime() + 24 * 60 * 60 * 1000);
+          console.log(`🕒 Licencia de un día. FechaFin + 24h: ${fechaFinPlus24.toISOString()}`);
+  
+          // Si la fecha actual ya es mayor o igual a fechaFinPlus24, reactivar
+          if (new Date() >= fechaFinPlus24) {
+            await pool.request()
+              .input('operadorId', sql.VarChar, licencia.operadorId)
+              .query(QUERIES.reactivarPersonal);
+            console.log(`✅ Reactivado operador ${licencia.operadorId} (hora de reactivación cumplida)`);
+          } else {
+            console.log(`ℹ️ Reactivación pendiente para operador ${licencia.operadorId}. No se cumple la espera de 24 horas aún.`);
+          }
         }
         // Si la fecha actual coincide con la fecha de fin (y no es un solo día), reactivar inmediatamente
         else if (fechaFin === fechaActual) {
@@ -136,21 +137,21 @@ class ActualizacionService {
   iniciarActualizacionAutomatica() {
 
     // Actualización especial el 1 de octubre
-    // schedule.scheduleJob(
-    //   { hour: 0, minute: 0, dayOfMonth: 1, month: 10, tz: 'America/Argentina/Buenos_Aires' }, 
-    //   async () => {
-    //   console.log('Iniciando actualización de octubre');
-    //   try {
-    //     await this.actualizacionOctubre();
-    //   } catch (error) {
-    //     console.error('Error en la actualización de octubre:', error);
-    //   }
-    // });
-    // Modo de prueba: ejecutar la actualización cada 1 minuto
-    schedule.scheduleJob('*/1 * * * *', async () => {
-      console.log('Iniciando actualización cada 1 minuto de estados de licencias (modo prueba)');
-      await this.actualizacionOctubre();
+    schedule.scheduleJob(
+      { hour: 0, minute: 0, dayOfMonth: 1, month: 10, tz: 'America/Argentina/Buenos_Aires' }, 
+      async () => {
+      console.log('Iniciando actualización de octubre');
+      try {
+        await this.actualizacionOctubre();
+      } catch (error) {
+        console.error('Error en la actualización de octubre:', error);
+      }
     });
+    // Modo de prueba: ejecutar la actualización cada 1 minuto
+    // schedule.scheduleJob('*/1 * * * *', async () => {
+    //   console.log('Iniciando actualización cada 1 minuto de estados de licencias (modo prueba)');
+    //   await this.actualizacionOctubre();
+    // });
   }
 
   iniciarActualizacionDiaria() {
@@ -164,11 +165,11 @@ class ActualizacionService {
     );
   
     // // Modo de prueba: ejecutar la actualización cada 1 minuto
-    // schedule.scheduleJob('*/1 * * * *', async () => {
-    //   console.log('Iniciando actualización cada 1 minuto de estados de licencias (modo prueba)');
-    //   await this.actualizarEstadosLicencias();
-    // });
-  }
+  //   schedule.scheduleJob('*/1 * * * *', async () => {
+  //     console.log('Iniciando actualización cada 1 minuto de estados de licencias (modo prueba)');
+  //     await this.actualizarEstadosLicencias();
+  //   });
+   }
   
 }
 

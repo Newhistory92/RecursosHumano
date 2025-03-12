@@ -64,15 +64,6 @@ updateLicencia: `
       `,
 //
   getHistorialLicencias: `
-      WITH UsoLicenciasOrdered AS ( 
-  SELECT 
-    u.*,
-    ROW_NUMBER() OVER (
-      PARTITION BY u.operadorId, u.anio, u.tipo 
-      ORDER BY u.createdAt DESC
-    ) AS rn
-  FROM UsoLicencias u
-)
 SELECT 
   l.id AS licenciaId,
   l.fechaInicio,
@@ -80,33 +71,54 @@ SELECT
   l.tipo,
   l.cantidad,
   l.estado,
-  l.anio,
+  l.anio AS licenciaAnio,
   l.createdAt AS licenciaCreatedAt,
   l.updatedAt AS licenciaUpdatedAt,
   o.sexo,
-  uo.id AS usoLicenciaId,
-  uo.totalUsado,
-  uo.tipo AS usoLicenciaTipo,
-  uo.anio AS usoLicenciaAnio,
-  uo.updatedAt AS usoLicenciaUpdatedAt,
-  uo.createdAt AS usoLicenciaCreatedAt,
-  la.diasLicenciaAsignados, -- Se obtiene de LicenciaporAnios
-  la.anio AS licenciaAnioAsignado, -- Asegura que se ve el año correcto
   p.condicionLaboral,
-  p.fechaInicioPlanta
+  p.fechaInicioPlanta,
+
+  -- UsoLicencias en formato JSON correcto
+  (
+    SELECT 
+      '[' + STUFF((
+        SELECT 
+          ',' + 
+          '{"usoLicenciaId":' + CAST(u.id AS VARCHAR) +
+          ',"totalUsado":' + CAST(u.totalUsado AS VARCHAR) +
+          ',"usoLicenciaTipo":"' + u.tipo + '"' +
+          ',"usoLicenciaAnio":' + CAST(u.anio AS VARCHAR) +
+          ',"usoLicenciaCreatedAt":"' + CONVERT(VARCHAR, u.createdAt, 120) + '"' +
+          ',"usoLicenciaUpdatedAt":"' + CONVERT(VARCHAR, u.updatedAt, 120) + '"}'
+        FROM UsoLicencias u
+        WHERE u.operadorId = l.operadorId
+          AND u.anio >= YEAR(GETDATE()) - 2
+        FOR XML PATH ('')
+      ), 1, 1, '') + ']' 
+  ) AS UsoLicenciasRecords,
+
+  -- LicenciaporAnios en formato JSON correcto
+  (
+    SELECT 
+      '[' + STUFF((
+        SELECT 
+          ',' + 
+          '{"licenciaAnioAsignado":' + CAST(la.anio AS VARCHAR) +
+          ',"diasLicenciaAsignados":' + CAST(la.diasLicenciaAsignados AS VARCHAR) +
+          ',"licenciaPorAniosCreatedAt":"' + CONVERT(VARCHAR, la.createdAt, 120) + '"' +
+          ',"licenciaPorAniosUpdatedAt":"' + CONVERT(VARCHAR, la.updatedAt, 120) + '"}'
+        FROM LicenciaporAnios la
+        WHERE la.personalId = p.id
+          AND la.anio >= YEAR(GETDATE()) - 2
+        FOR XML PATH ('')
+      ), 1, 1, '') + ']' 
+  ) AS LicenciaporAniosRecords
+
 FROM Licencias l
 JOIN Operador o ON l.operadorId = o.id
 JOIN Personal p ON l.operadorId = p.operadorId
-LEFT JOIN UsoLicenciasOrdered uo 
-  ON l.operadorId = uo.operadorId 
-  AND l.anio = uo.anio 
-  AND l.tipo = uo.tipo
-  AND uo.rn = 1
-LEFT JOIN LicenciaporAnios la
-  ON p.id = la.personalId
-  AND l.anio = la.anio
 WHERE l.operadorId = @operadorId
-  AND l.anio >= @anioActual - 2
+  AND l.anio >= YEAR(GETDATE()) - 2
 ORDER BY l.fechaInicio DESC;
 
 
