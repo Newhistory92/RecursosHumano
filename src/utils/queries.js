@@ -163,7 +163,7 @@ ORDER BY l.fechaInicio DESC;
   `,
 
   getLicenciasActivas: `
-    SELECT TOP 8 L.operadorId, L.tipo, L.fechaInicio, L.fechaFin
+    SELECT TOP 4 L.operadorId, L.tipo, L.fechaInicio, L.fechaFin
     FROM Licencias L
     WHERE L.estado = 'Aprobado'
     ORDER BY L.createdAt DESC

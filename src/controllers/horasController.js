@@ -35,35 +35,68 @@ class HorasController {
   async obtenerResumenHoras(req, res) {
     try {
       const { operadorId } = req.params;
-
+  
       if (!validarOperadorId(operadorId)) {
         return res.status(400).json({
           error: 'ID de operador inválido',
           mensaje: `El ID del operador '${operadorId}' no tiene un formato válido`
         });
       }
-
+  
       const pool = await getConnection();
-      const query = `
+  
+      // Query a HorasTrabajadas
+      const queryHorasTrabajadas = `
         SELECT horasExtra, updatedAt
         FROM HorasTrabajadas
         WHERE operadorId = @operadorId
       `;
-      const result = await pool.request()
+      const resultHoras = await pool.request()
         .input('operadorId', sql.VarChar, operadorId)
-        .query(query);
-
-      if (result.recordset.length === 0) {
+        .query(queryHorasTrabajadas);
+  
+      if (resultHoras.recordset.length === 0) {
         return res.status(404).json({
-          error: 'No se encontraron registros para el operador'
+          error: 'No se encontraron registros de horas trabajadas para el operador'
         });
       }
-
-      const { horasExtra, updatedAt } = result.recordset[0];
+  
+      const { horasExtra, updatedAt } = resultHoras.recordset[0];
       const horasExtraFormato = this.convertirDecimalAHora(horasExtra);
-
-      res.json({ horasExtra: horasExtraFormato, updatedAt });
-
+  
+      // Query a RegistroHorasDiarias
+      const queryRegistroHoras = `
+        SELECT id, fecha, horas
+        FROM RegistroHorasDiarias
+        WHERE operadorId = @operadorId
+      `;
+      const resultRegistroHoras = await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+        .query(queryRegistroHoras);
+      const registroHoras = resultRegistroHoras.recordset;
+  
+      // Query a HistorialAusencias para la fecha actual
+      const fechaActual = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+      const queryHistorialAusencias = `
+        SELECT fecha, justificado
+        FROM HistorialAusencias
+        WHERE operadorId = @operadorId
+          AND CONVERT(date, fecha) = @fechaActual
+      `;
+      const resultAusencias = await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+        .input('fechaActual', sql.Date, fechaActual)
+        .query(queryHistorialAusencias);
+      const ausencia = resultAusencias.recordset.length > 0 
+        ? resultAusencias.recordset[0] 
+        : {};
+  
+      res.json({
+        horasExtra: horasExtraFormato,
+        updatedAt,
+        registroHoras,
+        ausencia
+      });
     } catch (error) {
       console.error('Error en obtenerResumenHoras:', error);
       res.status(500).json({
@@ -72,6 +105,7 @@ class HorasController {
       });
     }
   }
+  
 
   // Función para sincronizar horas con la fecha actual
   async sincronizarHoras(req, res) {
@@ -131,7 +165,16 @@ async agregarAusencia(req, res) {
           `);
 
       console.log(`Ausencia insertada para operador ${operadorId} en la fecha ${fecha}`);
-
+        
+      // Actualizar Personal: establecer el campo "tipo" a "Ausente"
+    await pool.request()
+    .input('operadorId', sql.VarChar, operadorId)
+    .input('tipo', sql.VarChar, "Ausente")
+    .query(`
+        UPDATE Personal 
+        SET tipo = @tipo, updatedAt = GETDATE()
+        WHERE operadorId = @operadorId
+    `);
       // Obtener horasExtra actual desde HorasTrabajadas
       const resHoras = await pool.request()
           .input('operadorId', sql.VarChar, operadorId)
@@ -279,7 +322,6 @@ async listarAusencias(req, res) {
 async getRegistroHorasDiarias(req, res) {
   try {
       const { operadorId } = req.params;
-
       if (!operadorId) {
           return res.status(400).json({ error: "El operadorId es requerido" });
       }

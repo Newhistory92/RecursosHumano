@@ -83,9 +83,12 @@ class ActualizacionService {
       const result = await pool.request()
         .query(QUERIES.getLicenciasActivas);
       console.log(`🔹 Licencias activas encontradas: ${result.recordset.length}`);
-  
-      for (const licencia of result.recordset) {
-        // Convertir fechaInicio y fechaFin al formato YYYY-MM-DD
+      const licenciasFiltradas = result.recordset.filter(lic => {
+        const fi = new Date(lic.fechaInicio).toISOString().split('T')[0];
+        const ff = lic.fechaFin ? new Date(lic.fechaFin).toISOString().split('T')[0] : null;
+        return fi === fechaActual && ff === fechaActual;
+      });
+      for (const licencia of licenciasFiltradas) {
         const fechaInicio = new Date(licencia.fechaInicio).toISOString().split('T')[0];
         const fechaFin = licencia.fechaFin ? new Date(licencia.fechaFin).toISOString().split('T')[0] : null;
         
