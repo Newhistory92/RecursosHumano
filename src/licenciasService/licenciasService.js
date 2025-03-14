@@ -221,49 +221,38 @@ class LicenciasService {
     }
   }
   
-  async  eliminarLicencia(operadorId, licenciaId, oldCantidad, usoId) {
-    console.log("Iniciando eliminación de licencia...");
-    
+  
+  
+  async obtenerLicenciasPorAnios(personalId) {
     const pool = await getConnection();
-    
     try {
-      console.log("Datos recibidos:", { operadorId, licenciaId, oldCantidad, usoId });
+      if (!personalId || isNaN(personalId)) {
+        // Lanza error en lugar de usar res.status(...).json(...)
+        throw new Error(`El ID de personal '${personalId}' no es válido`);
+      }
   
-      // Restar la oldCantidad en UsoLicencias antes de eliminar la licencia
-      console.log("Actualizando UsoLicencias, restando la cantidad antigua...");
-      await pool
-      .request()
-      .input("usoId", sql.Int, usoId)
-      .input("oldCantidad", sql.Int, oldCantidad)
-      .query(`
-        UPDATE UsoLicencias 
-        SET totalUsado = totalUsado - @oldCantidad 
-        WHERE id = @usoId
-        `);
-        
-        console.log("Eliminando la licencia...");
-        await pool
-        .request()
-        .input("licenciaId", sql.Int, licenciaId)
-        .input("operadorId", sql.VarChar, operadorId)
-        .query(`
-          DELETE FROM Licencias 
-          WHERE id = @licenciaId AND operadorId = @operadorId
-          `);
+      const query = `
+        SELECT TOP 3 id, anio, diasLicenciaAsignados
+        FROM LicenciaporAnios
+        WHERE personalId = @personalId
+        ORDER BY anio DESC;
+      `;
   
-          console.log("Licencia eliminada exitosamente.");
-          return { success: true };
-          
+      const result = await pool.request()
+        .input('personalId', sql.Int, personalId)
+        .query(query);
+  
+      if (result.recordset.length === 0) {
+        throw new Error(`No se encontraron registros de licencia para el personal con ID ${personalId}`);
+      }
+  
+      return result.recordset;
     } catch (error) {
-      console.error("Error al eliminar licencia:", error);
-      return { error: "Error al eliminar la licencia", status: 500 };
+      console.error('Error en obtenerLicenciasPorAnios:', error);
+      throw error;
     }
   }
   
-
-  
-
-
   async getResumenLicencias(operadorId) {
     const hoy = new Date();
     const currentYear = hoy.getFullYear();

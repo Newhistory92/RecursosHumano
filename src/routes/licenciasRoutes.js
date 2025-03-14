@@ -7,7 +7,7 @@ router.get('/resumen/:operadorId', licenciasController.getResumenLicencias);
 router.post('/agendar/:operadorId', licenciasController.agendarLicencia);
 router.put('/actualizar/:operadorId', licenciasController.actualizarLicencia);
 router.delete('/eliminar/:operadorId/:licenciaId/:oldCantidad/:usoId', licenciasController.eliminarLicencia);
-// router.get('/historial/:operadorId', licenciasController.getHistorialLicencias);
+router.get('/licenciaporanio/:personalId', licenciasController.LicenciasPorAnios);
 
 // Ruta para forzar actualización manual (solo para pruebas/admin)
 router.post('/actualizarAutomatica', async (req, res) => {

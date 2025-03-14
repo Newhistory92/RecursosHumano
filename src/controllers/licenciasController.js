@@ -63,6 +63,18 @@ const licenciasController = {
   },
 
 
+
+  async LicenciasPorAnios(req, res) {
+    try {
+      const {  personalId } = req.params;
+      const licencia = await licenciasService.obtenerLicenciasPorAnios( personalId);
+      res.json(licencia);
+    } catch (error) {
+      console.error('Error agendando licencia:', error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+
   
   
 };

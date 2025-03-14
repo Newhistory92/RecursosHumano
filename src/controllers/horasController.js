@@ -13,7 +13,7 @@ class HorasController {
     this.agregarAusencia = this.agregarAusencia.bind(this);
     this.eliminarAusencia = this.eliminarAusencia.bind(this);
     this.listarAusencias = this.listarAusencias.bind(this);
-    this.getRegistroHorasDiarias = this.getRegistroHorasDiarias.bind(this);
+  
 
      // Programar el job para el primer día del mes a las 00:00
      schedule.scheduleJob(
@@ -22,6 +22,7 @@ class HorasController {
     );
     // Programar sincronización cada minuto
     schedule.scheduleJob({ hour: 22, minute: 0, tz: 'America/Argentina/Buenos_Aires' }, async () => {
+      //schedule.scheduleJob('* * * * *', async () => {
       try {
         // Fecha estática para pruebas
         await this.sincronizarHoras(); // Usar el mismo método para mantener consistencia
@@ -35,16 +36,16 @@ class HorasController {
   async obtenerResumenHoras(req, res) {
     try {
       const { operadorId } = req.params;
-  
+    
       if (!validarOperadorId(operadorId)) {
         return res.status(400).json({
           error: 'ID de operador inválido',
           mensaje: `El ID del operador '${operadorId}' no tiene un formato válido`
         });
       }
-  
+    
       const pool = await getConnection();
-  
+    
       // Query a HorasTrabajadas
       const queryHorasTrabajadas = `
         SELECT horasExtra, updatedAt
@@ -54,48 +55,64 @@ class HorasController {
       const resultHoras = await pool.request()
         .input('operadorId', sql.VarChar, operadorId)
         .query(queryHorasTrabajadas);
-  
+    
       if (resultHoras.recordset.length === 0) {
         return res.status(404).json({
           error: 'No se encontraron registros de horas trabajadas para el operador'
         });
       }
-  
+    
       const { horasExtra, updatedAt } = resultHoras.recordset[0];
       const horasExtraFormato = this.convertirDecimalAHora(horasExtra);
-  
-      // Query a RegistroHorasDiarias
+    
+      // Query a RegistroHorasDiarias: últimos 10 registros ordenados por fecha descendente
       const queryRegistroHoras = `
-        SELECT id, fecha, horas
+        SELECT TOP 10 id, fecha, horas
         FROM RegistroHorasDiarias
         WHERE operadorId = @operadorId
+        ORDER BY fecha DESC
       `;
       const resultRegistroHoras = await pool.request()
         .input('operadorId', sql.VarChar, operadorId)
         .query(queryRegistroHoras);
-      const registroHoras = resultRegistroHoras.recordset;
-  
-      // Query a HistorialAusencias para la fecha actual
-      const fechaActual = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+      let registroHoras = resultRegistroHoras.recordset;
+    
+      // Query a HistorialAusencias: últimos 10 registros del año actual
+      const currentYear = new Date().getFullYear();
       const queryHistorialAusencias = `
-        SELECT fecha, justificado
+        SELECT TOP 10 fecha, justificado
         FROM HistorialAusencias
         WHERE operadorId = @operadorId
-          AND CONVERT(date, fecha) = @fechaActual
+          AND YEAR(fecha) = @currentYear
+        ORDER BY fecha DESC
       `;
       const resultAusencias = await pool.request()
         .input('operadorId', sql.VarChar, operadorId)
-        .input('fechaActual', sql.Date, fechaActual)
+        .input('currentYear', sql.Int, currentYear)
         .query(queryHistorialAusencias);
-      const ausencia = resultAusencias.recordset.length > 0 
-        ? resultAusencias.recordset[0] 
-        : {};
-  
+      const ausencias = resultAusencias.recordset;
+    
+      // Fusionar datos: para cada registro de RegistroHorasDiarias, si la fecha coincide con alguna ausencia, se añade la información
+      registroHoras = registroHoras.map(rh => {
+        const fechaRh = new Date(rh.fecha).toISOString().split('T')[0];
+        const ausenciaMatch = ausencias.find(a => {
+          const fechaAus = new Date(a.fecha).toISOString().split('T')[0];
+          return fechaAus === fechaRh;
+        });
+        return {
+          id: rh.id,
+          fecha: rh.fecha,
+          horas: this.convertirDecimalAHora(rh.horas),
+          // Se agrega un objeto "ausencia" si hay coincidencia, de lo contrario queda vacío
+          ausencia: ausenciaMatch ? { fecha: ausenciaMatch.fecha, justificado: ausenciaMatch.justificado } : {}
+        };
+      });
+    
+      // Respuesta unificada
       res.json({
         horasExtra: horasExtraFormato,
         updatedAt,
-        registroHoras,
-        ausencia
+        registroHoras
       });
     } catch (error) {
       console.error('Error en obtenerResumenHoras:', error);
@@ -106,13 +123,26 @@ class HorasController {
     }
   }
   
+  
 
+  // Función para convertir decimal a formato HH:mm
+  convertirDecimalAHora(decimal) {
+    const esNegativo = decimal < 0;
+    const valorAbsoluto = Math.abs(decimal);
+    const horas = Math.floor(valorAbsoluto);
+    const minutos = Math.round((valorAbsoluto - horas) * 60);
+  
+    const horasFormato = `${esNegativo ? '-' : ''}${String(horas).padStart(2, '0')}`;
+    const minutosFormato = `${String(minutos).padStart(2, '0')}`;
+  
+    return `${horasFormato}:${minutosFormato}`;
+  }
   // Función para sincronizar horas con la fecha actual
   async sincronizarHoras(req, res) {
     try {
-      const fechaActual = new Date().toISOString().split('T')[0];
-     // const fecha = "22/04/2022"; // Fecha estática para pruebas
-      const resultado = await sincronizacionService.sincronizarRegistrosDiarios(fechaActual);
+      //const fechaActual = new Date().toISOString().split('T')[0];
+      const fecha = "23/04/2022"; // Fecha estática para pruebas
+      const resultado = await sincronizacionService.sincronizarRegistrosDiarios(fecha);
       
       if (res) {
         res.json({
@@ -133,13 +163,7 @@ class HorasController {
     }
   }
 
-  // Función para convertir decimal a formato HH:mm
-  convertirDecimalAHora(decimal) {
-    const horas = Math.floor(decimal);
-    const minutos = Math.round((decimal - horas) * 60);
-    return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
-  }
-
+  
 
 // Agregar ausencia: inserta en HistorialAusencias la fecha indicada con justificado = false
 
@@ -318,32 +342,6 @@ async listarAusencias(req, res) {
         res.status(500).json({ error: 'Error eliminando ausencia', mensaje: error.message });
     }
 }
-
-async getRegistroHorasDiarias(req, res) {
-  try {
-      const { operadorId } = req.params;
-      if (!operadorId) {
-          return res.status(400).json({ error: "El operadorId es requerido" });
-      }
-
-      const pool = await getConnection();
-      const result = await pool.request()
-          .input('operadorId', sql.VarChar, operadorId)
-          .query(`
-              SELECT TOP 10 * 
-              FROM RegistroHorasDiarias
-              WHERE operadorId = @operadorId
-              ORDER BY fecha DESC
-          `);
-
-      return res.status(200).json(result.recordset);
-  } catch (error) {
-      console.error('❌ Error en getRegistroHorasDiarias:', error);
-      return res.status(500).json({ error: "Error interno del servidor" });
-  }
-}
-
-
 
 
 }
