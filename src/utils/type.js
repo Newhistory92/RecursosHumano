@@ -33,6 +33,7 @@ const TIPOS_LICENCIA = [
     'Contratado':6,
     'Planta_Permanente': 7,
     'Medico': 6,
+    'Comisionado': null
     // Agregar otras condiciones según sea necesario
   };
 

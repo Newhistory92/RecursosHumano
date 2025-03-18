@@ -366,6 +366,49 @@ class LicenciasService {
     }
   }
   
+
+
+  async obtenerResumenGeneral() {
+    const pool = await getConnection();
+    try {
+      // Obtener cantidad de operadores
+      const queryOperadores = `
+        SELECT COUNT(*) AS cantidadOperadores
+        FROM Operador;
+      `;
+      const resultOperadores = await pool.request().query(queryOperadores);
+      const cantidadOperadores = resultOperadores.recordset[0].cantidadOperadores;
+  
+      // Obtener cantidad de licencias activas
+      const queryLicenciasActivas = `
+        SELECT COUNT(*) AS cantidadLicenciasActivas
+        FROM Licencias
+        WHERE fechaInicio <= GETDATE() 
+          AND fechaFin >= GETDATE();
+      `;
+      const resultLicencias = await pool.request().query(queryLicenciasActivas);
+      const cantidadLicenciasActivas = resultLicencias.recordset[0].cantidadLicenciasActivas;
+  
+      // Sumar horas extra negativas (convertidas en positivo)
+      const queryHorasExtraNegativas = `
+        SELECT SUM(ABS(horasExtra)) AS totalHorasExtraNegativas
+        FROM HorasTrabajadas
+        WHERE horasExtra < 0;
+      `;
+      const resultHorasExtra = await pool.request().query(queryHorasExtraNegativas);
+      const totalHorasExtraNegativas = resultHorasExtra.recordset[0].totalHorasExtraNegativas || 0;
+  
+      return {
+        cantidadOperadores,
+        cantidadLicenciasActivas,
+        totalHorasExtraNegativas
+      };
+    } catch (error) {
+      console.error("Error en obtenerResumenGeneral:", error);
+      throw error;
+    }
+  }
+  
   
 }
 

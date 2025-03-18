@@ -76,6 +76,23 @@ const licenciasController = {
   },
 
   
+  async obtenerResumenGeneral(req, res) {
+    try {
+      const resumen = await licenciasService.obtenerResumenGeneral();
+  
+      if (!resumen) {
+        return res.status(404).json({
+          error: "No se encontró información en el resumen general",
+        });
+      }
+  
+      res.json(resumen);
+    } catch (error) {
+      console.error('Error obteniendo resumen general:', error);
+      res.status(500).json({ error: 'Error obteniendo el resumen general', mensaje: error.message });
+    }
+  }
+  
   
 };
 

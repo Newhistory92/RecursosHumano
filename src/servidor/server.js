@@ -4,6 +4,7 @@ const { initializeDatabase, testConnection, closeConnection } = require('../conf
 
 const licenciasRoutes = require("../routes/licenciasRoutes")
 const horasRoutes = require("../routes/horasRoutes")
+const metricsRoutes = require("../routes/routerMetrics")
 const errorHandler = require("../middleware/errorHandler")
 require("dotenv").config()
 
@@ -22,6 +23,7 @@ app.use(express.json())
 
 app.use("/api/licencias", licenciasRoutes)
 app.use("/api/horas", horasRoutes)
+app.use("/api/metrics", metricsRoutes)
 
 // Middleware para rutas no encontradas
 app.use((req, res) => {
