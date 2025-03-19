@@ -2,6 +2,18 @@ const sql = require('mssql');
 const { getConnection } = require('../config/configbd');
 const {HORAS_POR_CONDICION} = require('../utils/type');
 class MetricService {
+
+    constructor() {
+        // objeto para almacenar feriados (en formato 'YYYY-MM-DD') agregar cada año este objeto
+        this.feriados = [
+            "2025-01-01", "2025-03-03", "2025-03-04", "2025-03-24", "2025-04-02",
+            "2025-04-17", "2025-04-18", "2025-05-01", "2025-05-25", "2025-06-17",
+            "2025-06-20", "2025-07-09", "2025-08-18", "2025-10-13", "2025-11-17",
+            "2025-12-08", "2025-12-25", "2025-05-02", "2025-08-15", "2025-10-10"
+          ];
+    }          
+      
+
   // Función para obtener quejas por departamento
   async getQuejasPorDepartamento() {
     try {
@@ -73,7 +85,7 @@ class MetricService {
   }
 
 
-  contarDiasHabiles(year, month, feriados = []) {
+   contarDiasHabiles(year, month) {
     let count = 0;
     const date = new Date(year, month - 1, 1); // month: 1-12
     while (date.getMonth() === month - 1) {
@@ -81,8 +93,8 @@ class MetricService {
       // 0: domingo, 6: sábado
       if (day !== 0 && day !== 6) {
         const dateString = date.toISOString().split('T')[0];
-        // Si no es feriado, cuenta el día
-        if (!feriados.includes(dateString)) {
+        // Verificar que no sea feriado (usando this.feriados)
+        if (!this.feriados.includes(dateString)) {
           count++;
         }
       }
@@ -96,7 +108,8 @@ class MetricService {
     try {
       const pool = await getConnection();
       const currentYear = new Date().getFullYear();
-      
+      const currentMonth = new Date().getMonth() + 1; // getMonth() devuelve 0-indexado
+
       // Se obtiene la condición laboral del operador desde Personal
       const resultPersonal = await pool.request()
         .input('operadorId', sql.VarChar, operadorId)
@@ -110,21 +123,27 @@ class MetricService {
       
       // Definir los meses a considerar (por ejemplo, de Enero a Junio)
       const meses = [
-        { nombre: "Ene", numero: 1 },
+       { nombre: "Ene", numero: 1 },
         { nombre: "Feb", numero: 2 },
         { nombre: "Mar", numero: 3 },
         { nombre: "Abr", numero: 4 },
         { nombre: "May", numero: 5 },
-        { nombre: "Jun", numero: 6 }
+        { nombre: "Jun", numero: 6 },
+        { nombre: "Jul", numero: 7 },
+        { nombre: "Ago", numero: 8 },
+        { nombre: "Sep", numero: 9 },
+        { nombre: "Oct", numero: 10 },
+        { nombre: "Nov", numero: 11 },
+        { nombre: "Dic", numero: 12 }
       ];
-
-      // Aquí se definen los feriados del año. Por ahora, un arreglo vacío. 
-      const feriados = []; // Puedes rellenarlo con fechas en formato 'YYYY-MM-DD'
+      
+      // Filtrar solo los meses que ya han transcurrido (mes <= currentMonth)
+      const mesesTranscurridos = meses.filter(mes => mes.numero <= currentMonth);
 
       // Para cada mes, obtener la suma de las horas trabajadas y la cantidad de quejas
-      const metricsData = await Promise.all(meses.map(async (mes) => {
-        // Calcular días hábiles del mes (excluyendo sábados, domingos y feriados)
-        const diasHabiles = this.contarDiasHabiles(currentYear, mes.numero, feriados);
+      const metricsData = await Promise.all(mesesTranscurridos.map(async (mes) => {
+        // Calcular días hábiles del mes (excluyendo sábados, domingos )
+        const diasHabiles = this.contarDiasHabiles(currentYear, mes.numero);
         const expectedHours = diasHabiles * horasDiarias;
         
         // Sumar las horas trabajadas del mes (RegistroHorasDiarias)

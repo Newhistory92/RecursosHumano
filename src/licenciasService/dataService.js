@@ -46,7 +46,7 @@ class DataService {
         .input('anioActual', sql.Int, anioActual)
         .query(QUERIES.getHistorialLicencias);
    
-        // console.log(   result)
+        //console.log(   result)
       historial = this.formatHistorialLicencias(result.recordset);
       //console.log( historial)
       cacheService.set(cacheKey, historial);

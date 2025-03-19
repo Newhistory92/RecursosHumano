@@ -13,27 +13,52 @@ class HorasController {
     this.agregarAusencia = this.agregarAusencia.bind(this);
     this.eliminarAusencia = this.eliminarAusencia.bind(this);
     this.listarAusencias = this.listarAusencias.bind(this);
-  
-
-     // Programar el job para el primer día del mes a las 00:00
-     schedule.scheduleJob(
+    
+    
+    // Programar el job para el primer día del mes a las 00:00
+    schedule.scheduleJob(
       { hour: 0, minute: 0, dayOfMonth: 1, tz: 'America/Argentina/Buenos_Aires' }, 
       reiniciarHorasExtraComisionado
     );
     // Programar sincronización cada minuto
     schedule.scheduleJob({ hour: 22, minute: 0, tz: 'America/Argentina/Buenos_Aires' }, async () => {
       //schedule.scheduleJob('* * * * *', async () => {
+        try {
+          // Fecha estática para pruebas
+          await this.sincronizarHoras(); // Usar el mismo método para mantener consistencia
+        } catch (error) {
+          console.error('Error en sincronización automática:', error);
+        }
+      });
+    }
+    
+    // Función para obtener resumen de horas trabajadas
+    // Función para sincronizar horas con la fecha actual
+    async sincronizarHoras(req, res) {
       try {
-        // Fecha estática para pruebas
-        await this.sincronizarHoras(); // Usar el mismo método para mantener consistencia
+        //const fechaActual = new Date().toISOString().split('T')[0];
+        const fecha = "23/04/2022"; // Fecha estática para pruebas
+        const resultado = await sincronizacionService.sincronizarRegistrosDiarios(fecha);
+        
+        if (res) {
+          res.json({
+            mensaje: 'Sincronización completada',
+            resultado
+          });
+        } else {
+          console.log('Sincronización automática completada:', resultado);
+        }
       } catch (error) {
-        console.error('Error en sincronización automática:', error);
+        console.error('Error en sincronizarHoras:', error);
+        if (res) {
+          res.status(500).json({
+            error: 'Error en sincronización',
+            mensaje: error.message
+          });
+        }
       }
-    });
-  }
-
-  // Función para obtener resumen de horas trabajadas
-  async obtenerResumenHoras(req, res) {
+    }
+    async obtenerResumenHoras(req, res) {
     try {
       const { operadorId } = req.params;
     
@@ -136,31 +161,6 @@ class HorasController {
     const minutosFormato = `${String(minutos).padStart(2, '0')}`;
   
     return `${horasFormato}:${minutosFormato}`;
-  }
-  // Función para sincronizar horas con la fecha actual
-  async sincronizarHoras(req, res) {
-    try {
-      //const fechaActual = new Date().toISOString().split('T')[0];
-      const fecha = "23/04/2022"; // Fecha estática para pruebas
-      const resultado = await sincronizacionService.sincronizarRegistrosDiarios(fecha);
-      
-      if (res) {
-        res.json({
-          mensaje: 'Sincronización completada',
-          resultado
-        });
-      } else {
-        console.log('Sincronización automática completada:', resultado);
-      }
-    } catch (error) {
-      console.error('Error en sincronizarHoras:', error);
-      if (res) {
-        res.status(500).json({
-          error: 'Error en sincronización',
-          mensaje: error.message
-        });
-      }
-    }
   }
 
   

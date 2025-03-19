@@ -6,6 +6,17 @@ const configService = require('../config/serverLicencia');
 const dataService = require('./dataService');
 const horasService = require('../services/horasService');
 class LicenciasService {
+  convertirDecimalAHora(decimal) {
+    const esNegativo = decimal < 0;
+    const valorAbsoluto = Math.abs(decimal);
+    const horas = Math.floor(valorAbsoluto);
+    const minutos = Math.round((valorAbsoluto - horas) * 60);
+
+    const horasFormato = `${esNegativo ? '-' : ''}${String(horas).padStart(2, '0')}`;
+    const minutosFormato = `${String(minutos).padStart(2, '0')}`;
+
+    return `${horasFormato}:${minutosFormato}`;
+  }
   async actualizarUsoLicencias(operadorId, tipo, anio, cantidadPost) {
     const pool = await getConnection();
     
@@ -260,7 +271,11 @@ class LicenciasService {
   
     try {
       const historialData = await dataService.loadHistorialLicencias(operadorId, currentYear);
-     //console.log('Datos recibidos de loadHistorialLicencias:', historialData);
+
+      if (!historialData || historialData.length === 0) {
+        return { mensaje: "No hay Licencias para mostrar" };
+      }
+    
       
       const personalData = historialData.length > 0 ? historialData[0].personal : {};
       //console.log('Datos de personal extraídos:', personalData);
@@ -397,11 +412,12 @@ class LicenciasService {
       `;
       const resultHorasExtra = await pool.request().query(queryHorasExtraNegativas);
       const totalHorasExtraNegativas = resultHorasExtra.recordset[0].totalHorasExtraNegativas || 0;
-  
+      const totalHorasExtraNegativasFormato = this.convertirDecimalAHora(totalHorasExtraNegativas);
+      
       return {
         cantidadOperadores,
         cantidadLicenciasActivas,
-        totalHorasExtraNegativas
+        totalHorasExtraNegativas: totalHorasExtraNegativasFormato
       };
     } catch (error) {
       console.error("Error en obtenerResumenGeneral:", error);

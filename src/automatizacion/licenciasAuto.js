@@ -140,16 +140,16 @@ class ActualizacionService {
   iniciarActualizacionAutomatica() {
 
     // Actualización especial el 1 de octubre
-    // schedule.scheduleJob(
-    //   { hour: 0, minute: 0, dayOfMonth: 1, month: 10, tz: 'America/Argentina/Buenos_Aires' }, 
-    //   async () => {
-    //   console.log('Iniciando actualización de octubre');
-    //   try {
-    //     await this.actualizacionOctubre();
-    //   } catch (error) {
-    //     console.error('Error en la actualización de octubre:', error);
-    //   }
-    // });
+    schedule.scheduleJob(
+      { hour: 0, minute: 0, dayOfMonth: 1, month: 10, tz: 'America/Argentina/Buenos_Aires' }, 
+      async () => {
+      console.log('Iniciando actualización de octubre');
+      try {
+        await this.actualizacionOctubre();
+      } catch (error) {
+        console.error('Error en la actualización de octubre:', error);
+      }
+    });
     // Modo de prueba: ejecutar la actualización cada 1 minuto
     // schedule.scheduleJob('*/1 * * * *', async () => {
     //   console.log('Iniciando actualización cada 1 minuto de estados de licencias (modo prueba)');

@@ -81,7 +81,7 @@ SELECT
   -- UsoLicencias en formato JSON correcto
   (
     SELECT 
-      '[' + STUFF((
+      '[' + STUFF(( 
         SELECT 
           ',' + 
           '{"usoLicenciaId":' + CAST(u.id AS VARCHAR) +
@@ -91,7 +91,7 @@ SELECT
           ',"usoLicenciaCreatedAt":"' + CONVERT(VARCHAR, u.createdAt, 120) + '"' +
           ',"usoLicenciaUpdatedAt":"' + CONVERT(VARCHAR, u.updatedAt, 120) + '"}'
         FROM UsoLicencias u
-        WHERE u.operadorId = l.operadorId
+        WHERE u.operadorId = o.id
           AND u.anio >= YEAR(GETDATE()) - 2
         FOR XML PATH ('')
       ), 1, 1, '') + ']' 
@@ -100,7 +100,7 @@ SELECT
   -- LicenciaporAnios en formato JSON correcto
   (
     SELECT 
-      '[' + STUFF((
+      '[' + STUFF(( 
         SELECT 
           ',' + 
           '{"licenciaAnioAsignado":' + CAST(la.anio AS VARCHAR) +
@@ -114,13 +114,11 @@ SELECT
       ), 1, 1, '') + ']' 
   ) AS LicenciaporAniosRecords
 
-FROM Licencias l
-JOIN Operador o ON l.operadorId = o.id
-JOIN Personal p ON l.operadorId = p.operadorId
-WHERE l.operadorId = @operadorId
-  AND l.anio >= YEAR(GETDATE()) - 2
+FROM Operador o
+LEFT JOIN Personal p ON o.id = p.operadorId
+LEFT JOIN Licencias l ON l.operadorId = o.id AND l.anio >= YEAR(GETDATE()) - 2
+WHERE o.id = @operadorId
 ORDER BY l.fechaInicio DESC;
-
 
         `,
 
