@@ -3,6 +3,7 @@ const moment = require('moment');
 const { getConnection } = require('../config/configbd');
 const sql = require('mssql');
 
+
 async function reiniciarHorasExtraComisionado() {
   console.log("Iniciando reinicio mensual de horasExtra para Comisionados:", new Date().toISOString());
   try {
@@ -34,7 +35,7 @@ async function reiniciarHorasExtraComisionado() {
       let horasExtraActuales = resHoras.recordset[0] ? (resHoras.recordset[0].horasExtra || 0) : 0;
       console.log(`Operador ${operadorId} - horasExtra actuales: ${horasExtraActuales}`);
 
-      // 3. Consultar RegistroHorasDiarias para el primer día del mes
+      // 3. Verificar si ya existe un registro en RegistroHorasDiarias para el primer día del mes
       const resRegistro = await pool.request()
         .input('operadorId', sql.VarChar, operadorId)
         .input('fecha', sql.Date, primerDiaMes)
@@ -45,10 +46,11 @@ async function reiniciarHorasExtraComisionado() {
         `);
 
       if (resRegistro.recordset.length > 0) {
+        // Si ya existe un registro, verificamos si las horas coinciden
         const registroHoras = resRegistro.recordset[0].horas;
         console.log(`Operador ${operadorId} - RegistroHorasDiarias existente en ${primerDiaMes}: ${registroHoras}`);
-        // Si no coincide, se actualiza
         if (registroHoras !== horasExtraActuales) {
+          // Si no coincide, actualizamos el registro
           await pool.request()
             .input('operadorId', sql.VarChar, operadorId)
             .input('fecha', sql.Date, primerDiaMes)
@@ -63,7 +65,7 @@ async function reiniciarHorasExtraComisionado() {
           console.log(`Operador ${operadorId} - RegistroHorasDiarias ya coincide con horasExtra.`);
         }
       } else {
-        // Si no existe, se inserta un nuevo registro
+        // Si no existe, insertamos un nuevo registro
         await pool.request()
           .input('operadorId', sql.VarChar, operadorId)
           .input('fecha', sql.Date, primerDiaMes)

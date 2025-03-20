@@ -318,20 +318,26 @@ class LicenciasService {
               : null;
 
             const usado = usoRecord ? usoRecord.totalUsado : 0;
-            // Calcular total basado en condiciones
             let total;
-    if (tipo === 'Licencia') {
-      total = item.diasLicenciaAsignados;
-    } else if (tipo === 'Parte_Medico') {
-      total = null;
-    } else if (tipo === 'Profilactica') {
-      if (!(condicionLaboral === 'Medico' || condicionLaboral === 'Comisionado')) {
-        return null; // Excluir del resumen
-      }
-      total = DIAS_POR_TIPO[tipo] || 0;
-    } else {
-      total = DIAS_POR_TIPO[tipo] || 0;
-    }
+
+if (tipo === 'Licencia') {
+  total = item.diasLicenciaAsignados;
+} else if (tipo === 'Parte_Medico') {
+  total = null;
+} else if (tipo === 'Profilactica') {
+  if (!(condicionLaboral === 'Medico' || condicionLaboral === 'Comisionado')) {
+    return null; // Excluir del resumen
+  }
+  total = DIAS_POR_TIPO[tipo] || 0;
+} else if (tipo === 'Articulo') {
+  if (condicionLaboral === 'Planta_Permanente' || condicionLaboral === 'Comisionado') {
+    total = DIAS_POR_TIPO[tipo] || 0;
+  } else {
+    return null; // Excluir si no cumple la condición
+  }
+} else {
+  total = DIAS_POR_TIPO[tipo] || 0;
+}
 
             // Calcular disponible
             const disponible = total !== null ? Math.max(0, total - usado) : null;

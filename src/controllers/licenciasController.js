@@ -1,6 +1,7 @@
 const licenciasService = require('../licenciasService/licenciasService');
 const ActualizacionService = require('../automatizacion/licenciasAuto');
-
+const dataService = require('../licenciasService/dataService');
+const ConfigService = require('../config/serverLicencia');
 const licenciasController = {
   async getResumenLicencias(req, res) {
     try {
@@ -18,8 +19,9 @@ const licenciasController = {
     try {
       const { operadorId } = req.params;
       const { tipo, fechaInicio, fechaFin, anio, cantidad } = req.body;
+      console.log(req.body)
       const licencia = await licenciasService.agendarLicencia(operadorId, tipo, fechaInicio, fechaFin, anio, cantidad);
-      res.json(licencia);
+      res.send(licencia.mensaje);
     } catch (error) {
       console.error('Error agendando licencia:', error);
       res.status(500).json({ error: error.message });
@@ -91,8 +93,44 @@ const licenciasController = {
       console.error('Error obteniendo resumen general:', error);
       res.status(500).json({ error: 'Error obteniendo el resumen general', mensaje: error.message });
     }
-  }
+  },
   
+  async calcularDiasLicenciaManual(req, res) {
+    const { operadorId } = req.params; // Extraer operadorId desde la URL
+    try {
+      
+      
+      // Obtener datos del operador
+      const personalDataResult = await dataService.loadPersonalData(operadorId);
+
+      if (!personalDataResult || Object.keys(personalDataResult).length === 0) {
+        console.log(`⚠️ No se encontraron datos de personal para operador ${operadorId}`);
+        return res.status(404).json({ mensaje: "No se encontraron datos del operador.", operadorId });
+      }
+
+      const { condicionLaboral, fechaInicioTrabj, fechaInicioPlanta, id } = personalDataResult;
+      
+      console.log(`🔹 Calculando días para operador ${operadorId}...`);
+      
+      // Llamar a la función de cálculo
+      const nuevosDias = await ConfigService.calcularDiasSegunAntiguedad(
+        fechaInicioPlanta,
+        condicionLaboral,
+        fechaInicioTrabj,
+        id,
+        operadorId
+      );
+
+      console.log(`✅ Días calculados: ${nuevosDias}`);
+
+      return res.status(200).json({ operadorId, nuevosDias });
+
+    } catch (error) {
+      console.error("❌ Error al calcular días de licencia manualmente:", error);
+      return res.status(500).json({ error: "Error interno del servidor" });
+    }
+  }
+
   
 };
 

@@ -17,9 +17,22 @@ class HorasController {
     
     // Programar el job para el primer día del mes a las 00:00
     schedule.scheduleJob(
-      { hour: 0, minute: 0, dayOfMonth: 1, tz: 'America/Argentina/Buenos_Aires' }, 
-      reiniciarHorasExtraComisionado
+      { 
+        hour: 0,         // Ejecutar a las 00:00 horas
+        minute: 0,       // Minuto 0
+        dayOfMonth: 1,   // Primer día del mes
+        tz: 'America/Argentina/Buenos_Aires' // Zona horaria de Argentina
+      }, 
+      async () => {
+        console.log("Ejecutando reiniciarHorasExtraComisionado el primer día del mes...");
+        try {
+          await reiniciarHorasExtraComisionado(); // Ejecutar la función
+        } catch (error) {
+          console.error("Error al ejecutar reiniciarHorasExtraComisionado:", error);
+        }
+      }
     );
+    
     // Programar sincronización cada minuto
     schedule.scheduleJob({ hour: 22, minute: 0, tz: 'America/Argentina/Buenos_Aires' }, async () => {
       //schedule.scheduleJob('* * * * *', async () => {

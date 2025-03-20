@@ -46,26 +46,33 @@ class ConfigService {
     // Para otros casos, se utiliza fechaInicioPlanta
     const hoy = new Date();
     const inicio = new Date(fechaInicioPlanta);
-    const añosAntiguedad = Math.floor((hoy.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24 * 365));
-    console.log('Años de antigüedad calculados:', añosAntiguedad);
+    const mesesAntiguedad = this.calcularMesesTrabajados(inicio, hoy);
+    console.log('Meses de antigüedad calculados:', mesesAntiguedad);
   
     let diasCalculados;
-    if (añosAntiguedad < 0.5) {
-      diasCalculados = 0;      // Menos de 6 meses
-    } else if (añosAntiguedad <= 5) {
-      diasCalculados = 10;     // De 6 meses a 5 años
-    } else if (añosAntiguedad <= 10) {
-      diasCalculados = 15;     // De 5 a 10 años
-    } else if (añosAntiguedad <= 20) {
-      diasCalculados = 25;     // De 10 a 20 años
+    if (mesesAntiguedad < 6) {
+      diasCalculados = 0; // Menos de 6 meses
+    } else if (mesesAntiguedad < 12) {
+      // Cálculo proporcional para 6 meses a 1 año
+      diasCalculados = Math.floor((10 * mesesAntiguedad) / 12); // 10 días base para 1 año
+      console.log('Días calculados proporcionalmente:', diasCalculados);
     } else {
-      diasCalculados = 30;     // Más de 20 años
+      // Más de 1 año
+      const añosAntiguedad = Math.floor(mesesAntiguedad / 12);
+      if (añosAntiguedad <= 5) {
+        diasCalculados = 10; // De 1 a 5 años
+      } else if (añosAntiguedad <= 10) {
+        diasCalculados = 15; // De 5 a 10 años
+      } else if (añosAntiguedad <= 20) {
+        diasCalculados = 25; // De 10 a 20 años
+      } else {
+        diasCalculados = 30; // Más de 20 años
+      }
     }
   
     console.log('Días asignados según antigüedad:', diasCalculados);
-    return await this.actualizarDiasLicencia( diasCalculados,id);
+    return await this.actualizarDiasLicencia(diasCalculados, id);
   }
-
   calcularMesesTrabajados(fechaInicio, fechaFin) {
     const mesesDiferencia = (fechaFin.getFullYear() - fechaInicio.getFullYear()) * 12 + 
                            (fechaFin.getMonth() - fechaInicio.getMonth());
@@ -78,69 +85,6 @@ class ConfigService {
     return Math.max(0, mesesDiferencia);
   }
 
-  // calcularAñosAntiguedad(fechaInicio, fechaActual) {
-  //   const diferenciaMeses = (fechaActual.getFullYear() - fechaInicio.getFullYear()) * 12 + 
-  //                           (fechaActual.getMonth() - fechaInicio.getMonth());
-  //   return diferenciaMeses / 12;
-  // }
-
-  // async calcularDiasRestantes(operadorId, diasCalculados) {
-  //   try {
-  //     const pool = await getConnection();
-  //     const hoy = new Date();
-  //     const currentYear = hoy.getFullYear();
-
-  //     // Determinar el "año activo" para licencias:
-  //     // - Si hoy es antes del 1 de octubre (mes 0-8), se usa el año anterior.
-  //     // - A partir del 1 de octubre, se usa el año en curso.
-  //     const activeYear = hoy.getMonth() < 9 ? currentYear - 1 : currentYear;
-
-  //     // Para efectos del resumen, la lógica de mostrar los 3 últimos años se implementa en la capa de API
-  //     // (por ejemplo, consultando para los años: si activeYear = currentYear - 1, se mostrarán [currentYear-3, currentYear-2, currentYear-1])
-      
-  //     // Obtener las licencias del año activo
-  //     const result = await pool.request()
-  //       .input('operadorId', sql.VarChar, operadorId)
-  //       .input('año', sql.Int, activeYear)
-  //       .input('tipo', sql.VarChar, 'Licencia')
-  //       .query(QUERIES.getLicenciasDelAño);
-
-  //     if (result.recordset.length > 0) {
-  //       // Calcular total usado en el año activo
-  //       const diasUsados = result.recordset.reduce((total, licencia) => total + licencia.cantidad, 0);
-
-  //       // Actualizar el uso de licencias para el año activo
-  //       await pool.request()
-  //         .input('operadorId', sql.VarChar, operadorId)
-  //         .input('tipo', sql.VarChar, 'Licencia')
-  //         .input('anio', sql.Int, activeYear)
-  //         .input('totalUsado', sql.Int, diasUsados)
-  //         .query(QUERIES.mergeUsoLicencias);
-
-  //       console.log('Total de días usados en el año activo:', {
-  //         activeYear,
-  //         diasUsados,
-  //         diasCalculados,
-  //         diasRestantes: Math.max(0, diasCalculados - diasUsados)
-  //       });
-
-  //       return Math.max(0, diasCalculados - diasUsados);
-  //     }
-      
-  //     // Si no hay registros, se actualiza el uso con 0 para el año activo
-  //     await pool.request()
-  //       .input('operadorId', sql.VarChar, operadorId)
-  //       .input('tipo', sql.VarChar, 'Licencia')
-  //       .input('anio', sql.Int, activeYear)
-  //       .input('totalUsado', sql.Int, 0)
-  //       .query(QUERIES.mergeUsoLicencias);
-
-  //     return diasCalculados;
-  //   } catch (error) {
-  //     console.error('Error al obtener historial de licencias:', error);
-  //     throw error;
-  //   }
-  // }
 
   async actualizarDiasLicencia(dias, id) {
     const anioActual = new Date().getFullYear(); // Obtener el año actual

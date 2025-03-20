@@ -1,7 +1,7 @@
 const TIPOS_LICENCIA = [
     'Licencia', 'Parte_Medico', 'Profilactica', 'Particular',
     'Matrimonio', 'Matrimonio_Hijo', 'Paternidad', 'Paternidad_Especial',
-    'Maternidad', 'Fallecimiento', 'Enfermedad', 'Guarda_Tenencia'
+    'Maternidad', 'Fallecimiento', 'Enfermedad', 'Guarda_Tenencia','Articulo'
   ];
   
   const DIAS_POR_TIPO = {
@@ -20,7 +20,6 @@ const TIPOS_LICENCIA = [
     Enfermedad: 28,
     Guarda_Tenencia: 15,
     Particular: 6,
-    Articulo:null,
     Profilactica: {
       dias: 10,
       soloMedicos: true 
