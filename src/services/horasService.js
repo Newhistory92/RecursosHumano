@@ -109,7 +109,8 @@ class HorasService {
   
     return entrada.diff(configurada, 'minutes');
   }
-  
+
+
   
   async justificarAusencia(ausenciaId, justificado, condicionLaboral, fechaJustificada, operadorId) {
     try {
@@ -147,7 +148,7 @@ class HorasService {
             WHERE operadorId = @operadorId
           `);
   
-        let horasExtraActuales = resHoras.recordset[0] ? (resHoras.recordset[0].horasExtra || 0) : 0;
+        let horasExtraActuales = resHoras.recordset[0] ? parseFloat(resHoras.recordset[0].horasExtra) : 0;
         console.log(`⏳ Horas extra actuales: ${horasExtraActuales}`);
   
         // 🔹 Definir la penalización según la condición laboral
@@ -159,13 +160,20 @@ class HorasService {
         console.log(`💼 Penalización de ${penalizacion} horas`);
   
         // 🔹 Calcular las nuevas horas extra
-        const nuevasHorasExtra = horasExtraActuales - penalizacion;
+        let nuevasHorasExtra;
+        if (horasExtraActuales >= 0) {
+          // Si las horas extra son positivas, se restan
+          nuevasHorasExtra = horasExtraActuales - penalizacion;
+        } else {
+          // Si las horas extra son negativas, se suman
+          nuevasHorasExtra = horasExtraActuales + penalizacion;
+        }
         console.log(`🕒 Nuevas horasExtra: ${nuevasHorasExtra}`);
   
         // 🔹 Actualizar la tabla HorasTrabajadas con el nuevo valor de horasExtra
         await pool.request()
           .input('operadorId', sql.VarChar, operadorId)
-          .input('horasExtra', sql.Float, nuevasHorasExtra)
+          .input('horasExtra', sql.Decimal(10, 2), nuevasHorasExtra) // Usar DECIMAL para precisión
           .query(`
             UPDATE HorasTrabajadas 
             SET horasExtra = @horasExtra, updatedAt = GETDATE()

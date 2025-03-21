@@ -72,7 +72,6 @@ class LicenciasService {
   }
 
   
-  
   async agendarLicencia(operadorId, tipo, fechaInicio, fechaFin, anio, cantidad) {
     const pool = await getConnection();
     try {
@@ -100,46 +99,13 @@ class LicenciasService {
           .query(QUERIES.actualizarTipoPersonal);
         console.log(`✅ Actualizado Personal: operador ${operadorId} ahora es de tipo ${tipo}`);
       }
-      
-      // 🔹 Buscar ausencias que coincidan con la fecha de la licencia
-      const resultadoAusencias = await pool.request()
-        .input('operadorId', sql.VarChar, operadorId)
-        .input('fechaInicio', sql.Date, fechaInicio)
-        .input('fechaFin', sql.Date, fechaFin)
-        .query(`
-          SELECT id FROM HistorialAusencias 
-          WHERE operadorId = @operadorId 
-          AND fecha BETWEEN @fechaInicio AND @fechaFin
-        `);
-        
-        if (resultadoAusencias.recordset.length > 0) {
-        // 🔹 Extraer el ID de la ausencia
-        const ausenciaId = resultadoAusencias.recordset[0].id;
-        
-        // 🔹 Obtener la condición laboral del operador desde la tabla Personal
-        const resultadoCondicion = await pool.request()
-        .input('operadorId', sql.VarChar, operadorId)
-          .query(`SELECT condicionLaboral FROM Personal WHERE operadorId = @operadorId`);
-          
-        if (resultadoCondicion.recordset.length === 0) {
-          throw new Error('No se encontró la condición laboral del operador.');
-        }
-        
-        const condicionLaboral = resultadoCondicion.recordset[0].condicionLaboral;
   
-        // 🔹 Llamar a horasService.justificarAusencia con los parámetros correctos
-        await horasService.justificarAusencia(ausenciaId, true, condicionLaboral, fechaInicio, operadorId);
-  
-        console.log(`✅ Ausencia ${ausenciaId} justificada para operador ${operadorId} con condición ${condicionLaboral}`);
-      }
-      
       return { success: true, mensaje: 'Licencia agendada correctamente' };
     } catch (error) {
       console.error('❌ Error al agendar licencia:', error);
       throw error;
     }
   }
-
   async actualizarLicencia(
     operadorId,
     id,
@@ -232,6 +198,43 @@ class LicenciasService {
     }
   }
   
+  async eliminarLicencia(operadorId, licenciaId, oldCantidad, usoId) {
+    const pool = await getConnection();
+    try {
+      console.log("Iniciando eliminación de licencia...");
+      console.log("Datos recibidos:", { operadorId, licenciaId, oldCantidad, usoId });
+  
+      // Restar la oldCantidad en UsoLicencias antes de eliminar la licencia
+      console.log("Actualizando UsoLicencias, restando la cantidad antigua...");
+      await pool.request()
+        .input("usoId", sql.Int, usoId)
+        .input("oldCantidad", sql.Int, oldCantidad)
+        .query(`
+          UPDATE UsoLicencias 
+          SET totalUsado = totalUsado - @oldCantidad 
+          WHERE id = @usoId
+        `);
+  
+      // Eliminar el registro de la licencia
+      console.log("Eliminando la licencia...");
+      await pool.request()
+        .input("licenciaId", sql.Int, licenciaId)
+        .input("operadorId", sql.VarChar, operadorId)
+        .query(`
+          DELETE FROM Licencias 
+          WHERE id = @licenciaId AND operadorId = @operadorId
+        `);
+  
+      // Invalidar la caché para que los cambios se reflejen en el frontend
+      dataService.invalidateOperadorCache(operadorId);
+  
+      console.log("Licencia eliminada exitosamente.");
+      return { success: true, mensaje: "Licencia eliminada correctamente" };
+    } catch (error) {
+      console.error("Error al eliminar licencia:", error);
+      return { error: "Error al eliminar la licencia", status: 500 };
+    }
+  }
   
   
   async obtenerLicenciasPorAnios(personalId) {

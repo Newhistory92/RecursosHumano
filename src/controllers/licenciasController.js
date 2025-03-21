@@ -19,7 +19,7 @@ const licenciasController = {
     try {
       const { operadorId } = req.params;
       const { tipo, fechaInicio, fechaFin, anio, cantidad } = req.body;
-      console.log(req.body)
+
       const licencia = await licenciasService.agendarLicencia(operadorId, tipo, fechaInicio, fechaFin, anio, cantidad);
       res.send(licencia.mensaje);
     } catch (error) {
@@ -40,11 +40,11 @@ const licenciasController = {
   
       console.log("Datos extraídos:", { id, fechaInicio, fechaFin, cantidad, tipo, usoId, oldanio, oldCantidad, oldTipo });
   
-      const licencia = await licenciasService.actualizarLicencia(
+      await licenciasService.actualizarLicencia(
         operadorId, id, fechaInicio, fechaFin, cantidad, tipo, usoId, oldanio, oldCantidad, oldTipo
       );
   
-      res.json(licencia);
+      res.status(200).json("Licencia actualizada correctamente");
     } catch (error) {
       console.error('Error agendando licencia:', error);
       res.status(500).json({ error: error.message });
@@ -56,8 +56,9 @@ const licenciasController = {
     try {
       const { operadorId, licenciaId, oldCantidad, usoId } = req.params;
       
-      const licencia = await licenciasService.eliminarLicencia( operadorId, licenciaId, oldCantidad, usoId);
-      res.json(licencia);
+       await licenciasService.eliminarLicencia( operadorId, licenciaId, oldCantidad, usoId);
+        
+      res.status(200).json("Licencia eliminada correctamente");
     } catch (error) {
       console.error('Error agendando licencia:', error);
       res.status(500).json({ error: error.message });

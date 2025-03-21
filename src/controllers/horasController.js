@@ -182,73 +182,85 @@ class HorasController {
 
 async agregarAusencia(req, res) {
   try {
-      const { operadorId, fecha, condicionLaboral } = req.body;
+    const { operadorId, fecha, condicionLaboral } = req.body;
 
-      if (!operadorId || !fecha || !condicionLaboral) {
-          return res.status(400).json({ error: 'Faltan parámetros: operadorId, fecha y condicionLaboral son requeridos' });
-      }
+    // Validaciones iniciales
+    if (!operadorId || !fecha || !condicionLaboral) {
+      return res.status(400).json({ error: 'Faltan parámetros: operadorId, fecha y condicionLaboral son requeridos' });
+    }
 
-      console.log(`Agregando ausencia para operador ${operadorId} en la fecha ${fecha}`);
+    console.log(`Agregando ausencia para operador ${operadorId} en la fecha ${fecha}`);
 
-      const pool = await getConnection();
+    const pool = await getConnection();
 
-      // Insertar ausencia (justificado = false por defecto)
-      await pool.request()
-          .input('operadorId', sql.VarChar, operadorId)
-          .input('fecha', sql.Date, fecha)
-          .query(`
-              INSERT INTO HistorialAusencias (operadorId, fecha, justificado, updatedAt)
-              VALUES (@operadorId, @fecha, 0, GETDATE())
-          `);
-
-      console.log(`Ausencia insertada para operador ${operadorId} en la fecha ${fecha}`);
-        
-      // Actualizar Personal: establecer el campo "tipo" a "Ausente"
+    // Insertar ausencia (justificado = false por defecto)
     await pool.request()
-    .input('operadorId', sql.VarChar, operadorId)
-    .input('tipo', sql.VarChar, "Ausente")
-    .query(`
+      .input('operadorId', sql.VarChar, operadorId)
+      .input('fecha', sql.Date, fecha)
+      .query(`
+        INSERT INTO HistorialAusencias (operadorId, fecha, justificado, updatedAt)
+        VALUES (@operadorId, @fecha, 0, GETDATE())
+      `);
+
+    console.log(`Ausencia insertada para operador ${operadorId} en la fecha ${fecha}`);
+
+    // Actualizar Personal: establecer el campo "tipo" a "Ausente"
+    await pool.request()
+      .input('operadorId', sql.VarChar, operadorId)
+      .input('tipo', sql.VarChar, "Ausente")
+      .query(`
         UPDATE Personal 
         SET tipo = @tipo, updatedAt = GETDATE()
         WHERE operadorId = @operadorId
-    `);
-      // Obtener horasExtra actual desde HorasTrabajadas
-      const resHoras = await pool.request()
-          .input('operadorId', sql.VarChar, operadorId)
-          .query(`SELECT horasExtra FROM HorasTrabajadas WHERE operadorId = @operadorId`);
+      `);
 
-      let horasExtraActuales = resHoras.recordset[0] ? (resHoras.recordset[0].horasExtra || 0) : 0;
+    // Obtener horasExtra actual desde HorasTrabajadas
+    const resHoras = await pool.request()
+      .input('operadorId', sql.VarChar, operadorId)
+      .query(`SELECT horasExtra FROM HorasTrabajadas WHERE operadorId = @operadorId`);
 
-      // Definir horas a sumar según la condición laboral
-      const HORAS_POR_CONDICION = {
-          'Contratado': 6,
-          'Planta_Permanente': 7,
-          'Comisionado': 0
-      };
+    let horasExtraActuales = resHoras.recordset[0] ? parseFloat(resHoras.recordset[0].horasExtra) : 0;
+    console.log(`⏳ Horas extra actuales: ${horasExtraActuales}`);
 
-      const horasASumar = HORAS_POR_CONDICION[condicionLaboral] || 0;
-      const nuevasHorasExtra = horasExtraActuales + horasASumar;
+    // Definir horas a sumar/restar según la condición laboral
+    const HORAS_POR_CONDICION = {
+      'Contratado': 6,
+      'Planta_Permanente': 7,
+      'Comisionado': 0
+    };
 
-      // Actualizar HorasTrabajadas con las nuevas horas extra
-      await pool.request()
-          .input('operadorId', sql.VarChar, operadorId)
-          .input('horasExtra', sql.Int, nuevasHorasExtra)
-          .query(`
-              UPDATE HorasTrabajadas 
-              SET horasExtra = @horasExtra 
-              WHERE operadorId = @operadorId
-          `);
+    const horasAjuste = HORAS_POR_CONDICION[condicionLaboral] || 0;
+    console.log(`💼 Penalización por ausencia: ${horasAjuste} horas`);
 
-      console.log(`Horas extra actualizadas a ${nuevasHorasExtra} para operador ${operadorId}`);
+    // Calcular las nuevas horas extra
+    let nuevasHorasExtra;
+    if (horasExtraActuales >= 0) {
+      // Si las horas extra son positivas, se restan
+      nuevasHorasExtra = horasExtraActuales - horasAjuste;
+    } else {
+      // Si las horas extra son negativas, se restan (acumulativo)
+      nuevasHorasExtra = horasExtraActuales - horasAjuste;
+    }
+    console.log(`🕒 Nuevas horasExtra: ${nuevasHorasExtra}`);
 
-      res.status(200).json({ mensaje: 'Ausencia agregada y horas extra actualizadas correctamente' });
+    // Actualizar HorasTrabajadas con las nuevas horas extra
+    await pool.request()
+      .input('operadorId', sql.VarChar, operadorId)
+      .input('horasExtra', sql.Decimal(10, 2), nuevasHorasExtra) // Usar DECIMAL para precisión
+      .query(`
+        UPDATE HorasTrabajadas 
+        SET horasExtra = @horasExtra, updatedAt = GETDATE()
+        WHERE operadorId = @operadorId
+      `);
 
+    console.log(`✅ Horas extra actualizadas a ${nuevasHorasExtra} para operador ${operadorId}`);
+
+    res.status(200).json({ mensaje: 'Ausencia agregada y horas extra actualizadas correctamente' });
   } catch (error) {
-      console.error('Error al agregar ausencia:', error);
-      res.status(500).json({ error: 'Error interno del servidor' });
+    console.error('❌ Error al agregar ausencia:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
   }
 }
-
 
 async justificarAusencia(req, res) {
   try {
