@@ -99,13 +99,47 @@ class LicenciasService {
           .query(QUERIES.actualizarTipoPersonal);
         console.log(`✅ Actualizado Personal: operador ${operadorId} ahora es de tipo ${tipo}`);
       }
-  
+
+      // 🔹 Buscar ausencias que coincidan con la fecha de la licencia
+      const resultadoAusencias = await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+        .input('fechaInicio', sql.Date, fechaInicio)
+        .input('fechaFin', sql.Date, fechaFin)
+        .query(`
+          SELECT id FROM HistorialAusencias 
+          WHERE operadorId = @operadorId 
+          AND fecha BETWEEN @fechaInicio AND @fechaFin
+        `);
+
+        if (resultadoAusencias.recordset.length > 0) {
+        // 🔹 Extraer el ID de la ausencia
+        const ausenciaId = resultadoAusencias.recordset[0].id;
+
+        // 🔹 Obtener la condición laboral del operador desde la tabla Personal
+        const resultadoCondicion = await pool.request()
+        .input('operadorId', sql.VarChar, operadorId)
+          .query(`SELECT condicionLaboral FROM Personal WHERE operadorId = @operadorId`);
+
+        if (resultadoCondicion.recordset.length === 0) {
+          throw new Error('No se encontró la condición laboral del operador.');
+        }
+
+        const condicionLaboral = resultadoCondicion.recordset[0].condicionLaboral;
+
+        // 🔹 Llamar a horasService.justificarAusencia con los parámetros correctos
+        await horasService.justificarAusencia(ausenciaId, true, condicionLaboral, fechaInicio, operadorId);
+
+        console.log(`✅ Ausencia ${ausenciaId} justificada para operador ${operadorId} con condición ${condicionLaboral}`);
+      }
+
       return { success: true, mensaje: 'Licencia agendada correctamente' };
     } catch (error) {
       console.error('❌ Error al agendar licencia:', error);
       throw error;
     }
   }
+
+  
   async actualizarLicencia(
     operadorId,
     id,

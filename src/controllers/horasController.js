@@ -4,7 +4,7 @@ const sincronizacionService = require('../services/sincronizacionService');
 const schedule = require('node-schedule');
 const { validarOperadorId } = require('../utils/validaciones');
 const reiniciarHorasExtraComisionado = require('../services/reiniciohoraExtra');
-const horasService = require('../services/horasService');
+
 class HorasController {
   constructor() {
     // Bind de los métodos
@@ -262,21 +262,6 @@ async agregarAusencia(req, res) {
   }
 }
 
-async justificarAusencia(req, res) {
-  try {
-    // Extraer ausenciaId desde los parámetros y justificado, condicionLaboral, fechaJustificada, operadorId desde el body
-    const { ausenciaId } = req.params;
-    const { justificado, condicionLaboral, fechaJustificada, operadorId } = req.body;
-
-  
-       await horasService.justificarAusencia(ausenciaId, justificado, condicionLaboral, fechaJustificada, operadorId);
-   
-    res.status(200).json({ mensaje: 'Ausencia actualizada y penalización de horas extra corregida' });
-  } catch (error) {
-    console.error('Error agendando licencia:', error);
-    res.status(500).json({ error: 'Error interno del servidor', mensaje: error.message });
-  }
-}
 
 
 async listarAusencias(req, res) {

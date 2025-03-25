@@ -71,30 +71,34 @@ class ActualizacionService {
       throw error;
     }
   }
-  
   async actualizarEstadosLicencias() {
     try {
       const pool = await getConnection();
-      // Obtener la fecha actual en formato local YYYY-MM-DD
-      const fechaActual = new Date();
-      const fechaActualStr = fechaActual.toLocaleDateString('en-CA');
-      console.log(`🔹 Fecha actual: ${fechaActualStr}`);
+      // Obtener la fecha actual en formato UTC YYYY-MM-DD
+      const fechaActual = new Date().toISOString().split('T')[0];
+      console.log(`🔹 Fecha actual: ${fechaActual}`);
   
       // Obtener las últimas 8 licencias activas
       const result = await pool.request().query(QUERIES.getLicenciasActivas);
       console.log(`🔹 Licencias activas encontradas: ${result.recordset.length}`);
   
+      // Guardamos en un conjunto los operadores procesados para luego verificar su estado
+      const operadoresProcesados = new Set();
+  
       for (const licencia of result.recordset) {
-        // Extraer fechaInicio y fechaFin en formato local
-        const fechaInicioStr = new Date(licencia.fechaInicio).toLocaleDateString('en-CA');
-        const fechaFinStr = licencia.fechaFin ? new Date(licencia.fechaFin).toLocaleDateString('en-CA') : null;
+        // Extraer fechaInicio y fechaFin en formato YYYY-MM-DD
+        const fechaInicioStr = new Date(licencia.fechaInicio).toISOString().split('T')[0];
+        const fechaFinStr = licencia.fechaFin ? new Date(licencia.fechaFin).toISOString().split('T')[0] : null;
   
         console.log(`🔹 Procesando licencia de operador ${licencia.operadorId}:`);
         console.log(`    • fechaInicio: ${fechaInicioStr}`);
         console.log(`    • fechaFin: ${fechaFinStr || 'No especificada'}`);
   
+        // Agregar el operador al conjunto
+        operadoresProcesados.add(licencia.operadorId);
+  
         // Si la fecha de inicio coincide con la fecha actual, actualizar el tipo en Personal
-        if (fechaInicioStr === fechaActualStr) {
+        if (fechaInicioStr === fechaActual) {
           console.log(`🟢 La fecha de inicio (${fechaInicioStr}) coincide con la fecha actual.`);
           await pool.request()
             .input('operadorId', sql.VarChar, licencia.operadorId)
@@ -103,21 +107,67 @@ class ActualizacionService {
           console.log(`✅ Actualizado operador ${licencia.operadorId} a tipo ${licencia.tipo}`);
         }
   
-        // Si la fecha de fin coincide con la fecha actual, reactivar inmediatamente
-        if (fechaFinStr === fechaActualStr) {
+        // Declarar variable para fecha de reactivación
+        let fechaReactivacionStr = null;
+        // Si existe fechaFin, calcular la fecha de reactivación sumando 24 horas
+        if (fechaFinStr) {
+          const fechaFinObj = new Date(licencia.fechaFin);
+          const fechaReactivacion = new Date(fechaFinObj.getTime() + 24 * 60 * 60 * 1000);
+          fechaReactivacionStr = fechaReactivacion.toISOString().split('T')[0];
+          console.log(`🕒 Fecha de reactivación calculada (fechaFin + 24h): ${fechaReactivacionStr}`);
+        }
+        // Si la fecha de reactivación coincide con la fecha actual, reactivar inmediatamente
+        if (fechaReactivacionStr === fechaActual) {
           await pool.request()
             .input('operadorId', sql.VarChar, licencia.operadorId)
             .query(QUERIES.reactivarPersonal);
-          console.log(`✅ Reactivado operador ${licencia.operadorId}`);
+          console.log(`✅ Reactivado operador ${licencia.operadorId} (reactivación programada para hoy)`);
         }
       }
+  
+      // Verificar para cada operador procesado si se debe actualizar a "Activo"
+      const resultPersonal = await pool.request().query(`SELECT operadorId, tipo FROM Personal`);
+      console.log(`🔹 Total de operadores en Personal: ${resultPersonal.recordset.length}`);
+      for (const persona of resultPersonal.recordset) {
+        const operadorId = persona.operadorId;
+        const tipoActual = persona.tipo;
+        console.log(`🔹 Operador ${operadorId} tiene tipo actual: ${tipoActual}`);
+  
+        // Si ya es "Activo", no es necesario hacer nada.
+        if (tipoActual === 'Activo') continue;
+  
+        // Consultar si existen licencias activas que justifiquen un estado diferente
+        const resultLicencias = await pool.request()
+          .input('operadorId', sql.VarChar, operadorId)
+          .query(`
+            SELECT COUNT(*) AS cantidad
+            FROM Licencias
+            WHERE operadorId = @operadorId
+              AND fechaInicio <= GETDATE()
+              AND fechaFin >= GETDATE()
+              AND (tipo IS NOT NULL AND tipo <> 'Activo')
+          `);
+        const cantidadLicencias = resultLicencias.recordset[0].cantidad;
+        console.log(`🔹 Operador ${operadorId} tiene ${cantidadLicencias} licencias activas que justifican un estado distinto a "Activo"`);
+  
+        // Si no hay licencias activas que justifiquen otro estado, actualizar a "Activo"
+        if (cantidadLicencias === 0) {
+          await pool.request()
+            .input('operadorId', sql.VarChar, operadorId)
+            .query(QUERIES.reactivarPersonal);
+          console.log(`✅ Se actualizó el operador ${operadorId} a "Activo" por falta de licencias justificadas.`);
+        }
+      }
+  
       console.log('🎉 Actualización diaria de estados de licencias completada');
     } catch (error) {
       console.error('❌ Error en actualización diaria de estados:', error);
     }
   }
   
-
+  
+   
+  
   iniciarActualizacionAutomatica() {
 
     // Actualización especial el 1 de octubre
@@ -140,20 +190,20 @@ class ActualizacionService {
 
   iniciarActualizacionDiaria() {
     //Original: ejecutar todos los días a las 00:00
-    schedule.scheduleJob(
-      { hour: 0, minute: 0, tz: 'America/Argentina/Buenos_Aires' },
-      async () => {
-        console.log('Iniciando actualización diaria de estados de licencias');
-        await this.actualizarEstadosLicencias();
-      }
-    );
+    // schedule.scheduleJob(
+    //   { hour: 0, minute: 0, tz: 'America/Argentina/Buenos_Aires' },
+    //   async () => {
+    //     console.log('Iniciando actualización diaria de estados de licencias');
+    //     await this.actualizarEstadosLicencias();
+    //   }
+    // );
   
     // // Modo de prueba: ejecutar la actualización cada 1 minuto
     // schedule.scheduleJob('*/1 * * * *', async () => {
     //   console.log('Iniciando actualización cada 1 minuto de estados de licencias (modo prueba)');
     //   await this.actualizarEstadosLicencias();
     // });
-    }
+     }
   
 }
 
