@@ -7,16 +7,17 @@ const { getConnection } = require('../config/configbd');
 class SincronizacionService {
   
   async obtenerOperadoresPorIdReloj(id) {
+
     try {
+      console.log("parametro id", id);
       const pool = await getConnection();
       const result = await pool.request()
-        .input('idReloj', sql.VarChar, id)
+      .input('idReloj', sql.VarChar, String(id))
         .query(`
           SELECT operadorId, condicionLaboral
           FROM Personal
           WHERE idReloj = @idReloj
         `);
-
       return result.recordset;
     } catch (error) {
       console.error(`Error obteniendo operadores para idReloj ${id}:`, error);
@@ -26,7 +27,10 @@ class SincronizacionService {
 
   async sincronizarRegistrosDiarios(fecha) {
     try { 
-     
+
+      const fechaSync = new Date(fecha);
+      const currentYear = fechaSync.getFullYear();
+
 
       // Obtener registros desde Access
       const logs = await accessDBService.getSystemLogsPorDia(fecha);
@@ -50,7 +54,7 @@ class SincronizacionService {
         });
       });
 
-      console.log('Registros agrupados por usuario:', registrosPorUsuario);
+      //console.log('Registros agrupados por usuario:', registrosPorUsuario);
 
       // Procesar cada grupo de registros
       for (const [userid, registros] of Object.entries(registrosPorUsuario)) {
@@ -64,29 +68,43 @@ class SincronizacionService {
         });
         
         // Obtener operador asociado al ID del reloj
+        console.log(`Buscando operadores para userid: ${userid}`);
         const operadores = await this.obtenerOperadoresPorIdReloj(userid);
-       // console.log(`Operadores encontrados para userid ${userid}:`, operadores);
+        console.log(`Operadores encontrados para userid ${userid}:`, operadores);
         
-        if (!operadores.length) {
-         // console.log(`No se encontró operador para el ID de reloj: ${userid}`);
-          continue;
-        }
-
-        if (!operadores.length) {
-          // Caso: operador ausente
-          console.log(`No se encontró operador para USERID ${userid}. Se marca ausencia.`);
-          const pool = await getConnection();
-
-          // Registrar en HistorialAusencias
+       if (!operadores.length) {
+        // Antes de marcar ausencia, verificamos en la tabla Licencias si tiene alguna licencia activa
+        console.log(`No se encontró operador para USERID ${userid}. Verificando licencias activas...`);
+        const pool = await getConnection();
+        const resultLic = await pool.request()
+          .input('operadorId', sql.VarChar, userid)
+          .input('fecha', sql.Date,  fechaSync)
+          .input('currentYear', sql.Int, currentYear)
+          .query(`
+            SELECT COUNT(*) AS cantidad
+            FROM Licencias
+            WHERE operadorId = @operadorId
+              AND fechaInicio <= @fecha
+              AND fechaFin >= @fecha
+              AND estado = 'Aprobado'
+              AND anio = @currentYear
+          `);
+          if (operadores.length === 0) {
+            // Si no se encuentra un operador para este userid, pasamos al siguiente
+            console.log(`No se encontró operador para userid ${userid}. Continuando con el siguiente usuario...`);
+            continue;
+        
+        } else {
+          console.log(`No hay licencias activas para operador ${userid}. Se marca ausencia.`);
+          // Registrar en HistorialAusencias para marcar ausencia
           await pool.request()
             .input('operadorId', sql.VarChar, userid)
             .input('fecha', sql.Date, fecha)
             .query(`
-              INSERT INTO HistorialAusencias (operadorId, fecha, justificado, createdAt)
+              INSERT INTO HistorialAusencias (operadorId, fecha, justificado, updatedAt)
               VALUES (@operadorId, @fecha, 0, GETDATE())
             `);
-          console.log(`Historial de ausencias insertado para operador ${userid} en fecha ${fecha}`);
-
+            console.log(`Historial de ausencias insertado para operador ${userid} en fecha ${fecha}`);
           // Actualizar HorasTrabajadas: extraer horasExtra actual y sumar la penalización
           const penaltyHoras = this.HORAS_POR_CONDICION['Contratado'] || 6;  // Se asume 'Contratado' si no hay datos
           const resHoras = await pool.request()
@@ -105,7 +123,7 @@ class SincronizacionService {
           console.log(`Para operador ausente ${userid}, se actualizó horasExtra a: ${nuevasHorasExtra}`);
           continue; // Pasar al siguiente grupo de registros
         }
-
+       }
 
 
         // Calcular horas trabajadas

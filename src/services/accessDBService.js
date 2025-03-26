@@ -50,8 +50,8 @@ class AccessDBService {
         }
       });
 
-      console.log('Registros procesados sin duplicados:', registrosUnicos);
-      console.log(`Total de registros únicos encontrados: ${registrosUnicos.length}`);
+      //console.log('Registros procesados sin duplicados:', registrosUnicos);
+      //console.log(`Total de registros únicos encontrados: ${registrosUnicos.length}`);
 
       return registrosUnicos;
 

@@ -190,13 +190,13 @@ class ActualizacionService {
 
   iniciarActualizacionDiaria() {
     //Original: ejecutar todos los días a las 00:00
-    // schedule.scheduleJob(
-    //   { hour: 0, minute: 0, tz: 'America/Argentina/Buenos_Aires' },
-    //   async () => {
-    //     console.log('Iniciando actualización diaria de estados de licencias');
-    //     await this.actualizarEstadosLicencias();
-    //   }
-    // );
+    schedule.scheduleJob(
+      { hour: 0, minute: 0, tz: 'America/Argentina/Buenos_Aires' },
+      async () => {
+        console.log('Iniciando actualización diaria de estados de licencias');
+        await this.actualizarEstadosLicencias();
+      }
+    );
   
     // // Modo de prueba: ejecutar la actualización cada 1 minuto
     // schedule.scheduleJob('*/1 * * * *', async () => {

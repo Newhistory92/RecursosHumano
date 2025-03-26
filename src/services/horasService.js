@@ -114,6 +114,7 @@ class HorasService {
   async justificarAusencia(ausenciaId, justificado, condicionLaboral, fecha, operadorId) {
     try {
       // Validaciones iniciales
+      console.log(ausenciaId)
       if (!operadorId || typeof justificado !== 'boolean' || !condicionLaboral || !fecha) {
         return { error: 'Faltan parámetros: operadorId, fecha, justificado y condicionLaboral son requeridos', status: 400 };
       }
@@ -124,24 +125,15 @@ class HorasService {
       // Convertir la fecha a formato YYYY-MM-DD para la comparación
       const fechaStr = new Date(fecha).toISOString().split('T')[0];
     
-      // Verificar si ya existe una ausencia para ese operador y esa fecha
-      const checkResult = await pool.request()
-        .input('operadorId', sql.VarChar, operadorId)
-        .input('fecha', sql.Date, fechaStr)
-        .query(`
-          SELECT TOP 1 id 
-          FROM HistorialAusencias 
-          WHERE operadorId = @operadorId 
-            AND CONVERT(date, fecha) = @fecha
-        `);
+     
     
-      if (checkResult.recordset.length > 0) {
+      if (ausenciaId.length > 0) {
         // Si existe, actualizar el registro existente
-        const existingAusenciaId = checkResult.recordset[0].id;
-        console.log(`🔍 Se encontró una ausencia existente (ID: ${existingAusenciaId}) para la fecha ${fechaStr}. Actualizando...`);
+      
+        console.log(`🔍 Se encontró una ausencia existente (ID: ${ausenciaId}) para la fecha ${fechaStr}. Actualizando...`);
     
         await pool.request()
-          .input('ausenciaId', sql.Int, existingAusenciaId)
+          .input('ausenciaId', sql.Int, ausenciaId)
           .input('justificado', sql.Bit, justificado)
           .query(`
             UPDATE HistorialAusencias

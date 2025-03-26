@@ -13,29 +13,32 @@ class HorasController {
     this.agregarAusencia = this.agregarAusencia.bind(this);
     this.eliminarAusencia = this.eliminarAusencia.bind(this);
     this.listarAusencias = this.listarAusencias.bind(this);
-    
-    
-    // Programar el job para el primer día del mes a las 00:00
-    schedule.scheduleJob(
-      { 
-        hour: 0,         // Ejecutar a las 00:00 horas
-        minute: 0,       // Minuto 0
-        dayOfMonth: 1,   // Primer día del mes
-        tz: 'America/Argentina/Buenos_Aires' // Zona horaria de Argentina
-      }, 
-      async () => {
-        console.log("Ejecutando reiniciarHorasExtraComisionado el primer día del mes...");
-        try {
-          await reiniciarHorasExtraComisionado(); // Ejecutar la función
-        } catch (error) {
-          console.error("Error al ejecutar reiniciarHorasExtraComisionado:", error);
-        }
+
+function programarReinicioMensual() {
+  schedule.scheduleJob(
+    { 
+      hour: 0,
+      minute: 0,
+      dayOfMonth: 1,
+      tz: 'America/Argentina/Buenos_Aires'
+    }, 
+    async () => {
+      console.log("🔹 Ejecutando reiniciarHorasExtraComisionado el primer día del mes...");
+      try {
+        await reiniciarHorasExtraComisionado();
+      } catch (error) {
+        console.error("❌ Error al ejecutar reiniciarHorasExtraComisionado:", error);
       }
-    );
-    
+    }
+  );
+}
+
+// Iniciar el job para el primer día de cada mes
+programarReinicioMensual();
+
     // Programar sincronización cada minuto
     schedule.scheduleJob({ hour: 22, minute: 0, tz: 'America/Argentina/Buenos_Aires' }, async () => {
-      //schedule.scheduleJob('* * * * *', async () => {
+     //schedule.scheduleJob('* * * * *', async () => {
         try {
           // Fecha estática para pruebas
           await this.sincronizarHoras(); // Usar el mismo método para mantener consistencia
@@ -50,7 +53,7 @@ class HorasController {
     async sincronizarHoras(req, res) {
       try {
         //const fechaActual = new Date().toISOString().split('T')[0];
-        const fecha = "23/04/2022"; // Fecha estática para pruebas
+        const fecha = "2024/10/24"; // Fecha estática para pruebas
         const resultado = await sincronizacionService.sincronizarRegistrosDiarios(fecha);
         
         if (res) {

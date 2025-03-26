@@ -21,7 +21,7 @@ class LicenciasService {
     const pool = await getConnection();
     
     try {
-      // Consultar si ya existe un registro en UsoLicencias para este operador, tipo y anio
+      //Consultar si ya existe un registro en UsoLicencias para este operador, tipo y anio
       const existingResult = await pool.request()
       .input('operadorId', sql.VarChar, operadorId)
       .input('tipo', sql.VarChar(50), tipo)
