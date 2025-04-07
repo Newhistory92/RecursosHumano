@@ -71,7 +71,7 @@ async function reiniciarHorasExtraComisionado() {
           .input('fecha', sql.Date, primerDiaMes)
           .input('horas', sql.Float, horasExtraActuales)
           .query(`
-            INSERT INTO RegistroHorasDiarias (operadorId, fecha, horas, createdAt)
+            INSERT INTO RegistroHorasDiarias (operadorId, fecha, horas,  updatedAt)
             VALUES (@operadorId, @fecha, @horas, GETDATE())
           `);
         console.log(`Operador ${operadorId} - Nuevo RegistroHorasDiarias insertado con ${horasExtraActuales} horas.`);

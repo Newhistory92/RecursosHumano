@@ -4,15 +4,34 @@ const sincronizacionService = require('../services/sincronizacionService');
 const schedule = require('node-schedule');
 const { validarOperadorId } = require('../utils/validaciones');
 const reiniciarHorasExtraComisionado = require('../services/reiniciohoraExtra');
-
+const metricService = require('../metrics/metricService');
 class HorasController {
   constructor() {
     // Bind de los métodos
     this.obtenerResumenHoras = this.obtenerResumenHoras.bind(this);
-    this.sincronizarHoras = this.sincronizarHoras.bind(this);
     this.agregarAusencia = this.agregarAusencia.bind(this);
     this.eliminarAusencia = this.eliminarAusencia.bind(this);
     this.listarAusencias = this.listarAusencias.bind(this);
+
+
+    function esDiaHabil() {
+      const hoy = new Date();
+      const diaSemana = hoy.getDay(); // 0 = Domingo, 6 = Sábado
+      const fechaStr = hoy.toISOString().split('T')[0];
+  
+      if (diaSemana === 0 || diaSemana === 6) {
+          console.log(`Hoy es ${diaSemana === 0 ? "domingo" : "sábado"} (${fechaStr}), no se ejecuta el job.`);
+          return false;
+      }
+  
+      if (metricService.feriados.includes(fechaStr)) {
+          console.log(`Hoy es feriado (${fechaStr}), no se ejecuta el job.`);
+          return false;
+      }
+  
+      return true;
+  }
+
 
 function programarReinicioMensual() {
   schedule.scheduleJob(
@@ -36,44 +55,24 @@ function programarReinicioMensual() {
 // Iniciar el job para el primer día de cada mes
 programarReinicioMensual();
 
-    // Programar sincronización cada minuto
-    schedule.scheduleJob({ hour: 22, minute: 0, tz: 'America/Argentina/Buenos_Aires' }, async () => {
-     //schedule.scheduleJob('* * * * *', async () => {
-        try {
-          // Fecha estática para pruebas
-          await this.sincronizarHoras(); // Usar el mismo método para mantener consistencia
-        } catch (error) {
-          console.error('Error en sincronización automática:', error);
-        }
-      });
-    }
-    
-    // Función para obtener resumen de horas trabajadas
-    // Función para sincronizar horas con la fecha actual
-    async sincronizarHoras(req, res) {
-      try {
-        //const fechaActual = new Date().toISOString().split('T')[0];
-        const fecha = "2024/10/24"; // Fecha estática para pruebas
-        const resultado = await sincronizacionService.sincronizarRegistrosDiarios(fecha);
-        
-        if (res) {
-          res.json({
-            mensaje: 'Sincronización completada',
-            resultado
-          });
-        } else {
-          console.log('Sincronización automática completada:', resultado);
-        }
-      } catch (error) {
-        console.error('Error en sincronizarHoras:', error);
-        if (res) {
-          res.status(500).json({
-            error: 'Error en sincronización',
-            mensaje: error.message
-          });
-        }
-      }
-    }
+schedule.scheduleJob({ hour: 22, minute: 0, tz: 'America/Argentina/Buenos_Aires' }, async () => {
+  //schedule.scheduleJob('* * * * *', async () => {
+  if (!esDiaHabil()) return;
+
+  try {
+      console.log(`🔄 Ejecutando sincronización automática de registros diarios a la hora: ${new Date().toLocaleString()}`);
+       const fecha = "2024/10/24"; // Fecha estática para pruebas
+      //const fecha = new Date().toISOString().split('T')[0];
+      await sincronizacionService.sincronizarRegistrosDiarios(fecha);
+      console.log("Sincronización ejecutada correctamente, Terminado el",new Date().toLocaleString());
+  } catch (error) {
+      console.error('Error en sincronización automática:', error);
+  }
+});
+}
+   
+   
+
     async obtenerResumenHoras(req, res) {
     try {
       const { operadorId } = req.params;

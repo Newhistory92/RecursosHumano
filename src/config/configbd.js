@@ -3,7 +3,7 @@ require("dotenv").config();
 const { QUERIES } = require('../utils/queries');
 
 // Configuración de la base de datos
-const dbConfig = {
+const baseConfig = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   server: process.env.DB_SERVER,
@@ -13,23 +13,36 @@ const dbConfig = {
     trustServerCertificate: true,
   },
 }
-
+const dbConfig1 = { ...baseConfig, database: process.env.DB_PAGINA }; // Primera DB
+const dbConfig2 = { ...baseConfig, database: process.env.DB_OSP }; // Segunda DB
 // Variable para mantener el pool de conexiones
-let globalPool = null;
+let poolDB1 = null;
+let poolDB2 = null;
 
 // Pool de conexiones para reutilizar
 const getConnection = async () => {
   try {
-    if (!globalPool) {
-      globalPool = await sql.connect(dbConfig);
+    if (!poolDB1) {
+      poolDB1 = await sql.connect( dbConfig1);
     }
-    return globalPool;
+    return poolDB1;
   } catch (error) {
     console.error("Error al obtener conexión:", error);
     throw error;
   }
 };
 
+const getConnectionDB2 = async () => {
+  try {
+    if (!poolDB2) {
+      poolDB2 = await sql.connect(dbConfig2);
+    }
+    return poolDB2;
+  } catch (error) {
+    console.error("Error al obtener conexión:", error);
+    throw error;
+  }
+};
 async function testConnection() {
   try {
     await getConnection();
@@ -58,8 +71,10 @@ async function initializeDatabase() {
 async function closeConnection() {
   if (globalPool) {
     try {
-      await globalPool.close();
-      globalPool = null;
+      if (poolDB1) await poolDB1.close();
+      if (poolDB2) await poolDB2.close();
+      poolDB1 = null;
+      poolDB2 = null;
       console.log('Conexión cerrada correctamente');
     } catch (error) {
       console.error('Error al cerrar la conexión:', error);
@@ -69,9 +84,10 @@ async function closeConnection() {
 }
 
 module.exports = { 
-  dbConfig, 
+  baseConfig, 
   testConnection, 
   getConnection, 
+  getConnectionDB2,
   initializeDatabase,
   closeConnection 
 };

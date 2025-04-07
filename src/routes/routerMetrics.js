@@ -6,5 +6,7 @@ const metricsController = require('../controllers/metricsController');
 router.get('/quejas-por-departamento', metricsController.quejasPorDepartamento);
 router.get('/licencias-por-tipo', metricsController.licenciasPorTipo);
 router.get('/resumen-mensual/:operadorId', metricsController.resumenMensual);
+router.get('/resumen-afiliado', metricsController.obtenerAfiliados);
+router.get('/resumen-prestador', metricsController.obtenerPrestadores);
 
 module.exports = router;

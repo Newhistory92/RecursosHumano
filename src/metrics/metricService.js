@@ -1,6 +1,7 @@
 const sql = require('mssql');
 const { getConnection } = require('../config/configbd');
 const {HORAS_POR_CONDICION} = require('../utils/type');
+
 class MetricService {
 
     constructor() {
@@ -176,10 +177,11 @@ class MetricService {
           .query(queryQuejas);
         const complaints = resultQuejas.recordset[0].totalQuejas;
   
+        
         return {
           mes: mes.nombre,
-          horasTrabajadas: hoursWorked,
-          horasEsperadas: expectedHours,
+          horasTrabajadas:this.convertirDecimalAHora(hoursWorked),
+          horasEsperadas: this.convertirDecimalAHora(expectedHours),
           quejas: complaints
         };
       }));
@@ -190,6 +192,15 @@ class MetricService {
       throw error;
     }
   }
+
+
+  convertirDecimalAHora(decimal) {
+    // Redondea directamente el decimal al entero más cercano
+    const horas = Math.round(decimal);
+    return horas;
+}
+
+
 }
 
 module.exports = new MetricService();
